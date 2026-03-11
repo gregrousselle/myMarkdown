@@ -281,4 +281,19 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
   margin-top: 8px;
 }
 .btn-primary:hover { background: #81a1c1; }
+
+.btn-icon {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.btn-icon:hover {
+  background: #3b4252;
+}
 </style>
