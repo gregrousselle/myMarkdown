@@ -1,5 +1,5 @@
 <template>
-  <div class="app">
+  <div class="app" @drop.prevent="onDrop" @dragover.prevent>
     <!-- Barre de titre macOS -->
     <div class="titlebar">
       <div class="titlebar-traffic-lights"></div>
@@ -15,8 +15,7 @@
       <Sidebar
         :files="files"
         :currentFile="currentFile"
-        :folderName="folderName"
-        @open-folder="openFolder"
+        @open-files="openFiles"
         @select-file="selectFile"
         @new-file="createNewFile"
       />
@@ -53,7 +52,7 @@
             </svg>
             <h1>MyMarkdown</h1>
             <p>Éditeur Markdown propulsé par Milkdown &amp; Vue.js</p>
-            <button @click="openFolder" class="btn-primary">Ouvrir un dossier</button>
+            <button @click="openFiles" class="btn-primary">Ouvrir des fichiers</button>
           </div>
         </div>
       </div>
@@ -71,7 +70,6 @@ const files        = ref([]);
 const currentFile  = ref(null);
 const currentContent = ref('');
 const isDirty      = ref(false);
-const folderPath   = ref(null);
 const editorRef    = ref(null);
 const editorMode   = ref('wysiwyg');
 
@@ -80,23 +78,39 @@ const currentFileName = computed(() => {
   return currentFile.value.split('/').pop();
 });
 
-const folderName = computed(() => {
-  if (!folderPath.value) return null;
-  return folderPath.value.split('/').pop();
-});
+function addFiles(filePaths) {
+  const newFiles = filePaths.map(path => {
+    // Convert path to have single standard separator for splitting easily across OS
+    const normalizedPath = path.replace(/\\/g, '/');
+    return { path, name: normalizedPath.split('/').pop() };
+  });
 
-async function openFolder() {
-  const folder = await window.electronAPI.openFolder();
-  if (!folder) return;
-  folderPath.value = folder;
-  await loadFolder(folder);
+  newFiles.forEach(newFile => {
+    if (!files.value.find(f => f.path === newFile.path)) {
+      files.value.push(newFile);
+    }
+  });
+
+  if (filePaths.length > 0 && !currentFile.value) {
+    selectFile(filePaths[0]);
+  }
 }
 
-async function loadFolder(folder) {
-  const fileList = await window.electronAPI.readDir(folder);
-  files.value = fileList;
-  if (fileList.length > 0) {
-    await selectFile(fileList[0].path);
+async function openFiles() {
+  const selectedFiles = await window.electronAPI.openFiles();
+  if (!selectedFiles || selectedFiles.length === 0) return;
+  addFiles(selectedFiles);
+  await selectFile(selectedFiles[0]);
+}
+
+function onDrop(e) {
+  const droppedFiles = Array.from(e.dataTransfer.files)
+    .filter(f => f.name.endsWith('.md'))
+    .map(f => f.path);
+  
+  if (droppedFiles.length > 0) {
+    addFiles(droppedFiles);
+    selectFile(droppedFiles[0]);
   }
 }
 
@@ -118,10 +132,9 @@ async function saveFile() {
 }
 
 async function createNewFile() {
-  if (!folderPath.value) return;
-  const filePath = await window.electronAPI.newFile(folderPath.value);
+  const filePath = await window.electronAPI.saveNewFile();
   if (!filePath) return;
-  await loadFolder(folderPath.value);
+  addFiles([filePath]);
   await selectFile(filePath);
 }
 

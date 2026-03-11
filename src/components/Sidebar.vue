@@ -1,17 +1,14 @@
 <template>
   <aside class="sidebar">
     <div class="sidebar-header">
-      <span class="folder-name" :title="folderName">
-        {{ folderName || 'Aucun dossier' }}
-      </span>
+      <span class="folder-name">Fichiers ouverts</span>
       <div class="sidebar-actions">
-        <button @click="$emit('open-folder')" class="btn-icon" title="Ouvrir un dossier">
+        <button @click="$emit('open-files')" class="btn-icon" title="Ouvrir un ou plusieurs fichiers">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
           </svg>
         </button>
         <button
-          v-if="folderName"
           @click="$emit('new-file')"
           class="btn-icon"
           title="Nouveau fichier"
@@ -26,7 +23,7 @@
 
     <div class="sidebar-files">
       <p v-if="files.length === 0" class="empty-state">
-        {{ folderName ? 'Aucun fichier .md trouvé' : 'Ouvrez un dossier pour commencer' }}
+        Ouvrez des fichiers ou glissez-les ici pour commencer
       </p>
       <button
         v-for="file in files"
@@ -50,10 +47,9 @@
 defineProps({
   files:       { type: Array,  default: () => [] },
   currentFile: { type: String, default: null },
-  folderName:  { type: String, default: null },
 });
 
-defineEmits(['open-folder', 'select-file', 'new-file']);
+defineEmits(['open-files', 'select-file', 'new-file']);
 </script>
 
 <style scoped>

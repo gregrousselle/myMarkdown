@@ -32,15 +32,15 @@ ipcMain.handle('dialog:open-folder', async () => {
   return null;
 });
 
-ipcMain.handle('dialog:open-file', async () => {
+ipcMain.handle('dialog:open-files', async () => {
   const result = await dialog.showOpenDialog({
     filters: [{ name: 'Markdown', extensions: ['md'] }],
-    properties: ['openFile'],
+    properties: ['openFile', 'multiSelections'],
   });
   if (!result.canceled && result.filePaths.length > 0) {
-    return result.filePaths[0];
+    return result.filePaths;
   }
-  return null;
+  return [];
 });
 
 ipcMain.handle('fs:read-dir', (_event, folderPath) => {
@@ -71,15 +71,16 @@ ipcMain.handle('fs:write-file', (_event, filePath, content) => {
   }
 });
 
-ipcMain.handle('fs:new-file', (_event, folderPath) => {
-  try {
-    const name = `nouveau-${Date.now()}.md`;
-    const filePath = path.join(folderPath, name);
-    fs.writeFileSync(filePath, `# Nouveau fichier\n\n`, 'utf-8');
-    return filePath;
-  } catch {
-    return null;
+ipcMain.handle('dialog:save-new-file', async () => {
+  const result = await dialog.showSaveDialog({
+    filters: [{ name: 'Markdown', extensions: ['md'] }],
+    defaultPath: 'Nouveau fichier.md'
+  });
+  if (!result.canceled && result.filePath) {
+    fs.writeFileSync(result.filePath, '# Nouveau fichier\n\n', 'utf-8');
+    return result.filePath;
   }
+  return null;
 });
 
 // --- App lifecycle ---
