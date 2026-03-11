@@ -25,7 +25,7 @@
       <p v-if="files.length === 0" class="empty-state">
         Ouvrez des fichiers ou glissez-les ici pour commencer
       </p>
-      <button
+      <div
         v-for="file in files"
         :key="file.path"
         @click="$emit('select-file', file.path)"
@@ -38,7 +38,17 @@
           <polyline points="14 2 14 8 20 8"/>
         </svg>
         <span class="file-name">{{ file.name }}</span>
-      </button>
+        <button
+          @click.stop="$emit('close-file', file.path)"
+          class="file-close-btn"
+          title="Fermer le fichier"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
     </div>
   </aside>
 </template>
@@ -49,7 +59,7 @@ defineProps({
   currentFile: { type: String, default: null },
 });
 
-defineEmits(['open-files', 'select-file', 'new-file']);
+defineEmits(['open-files', 'select-file', 'new-file', 'close-file']);
 </script>
 
 <style scoped>
@@ -141,8 +151,37 @@ defineEmits(['open-files', 'select-file', 'new-file']);
 }
 
 .file-name {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.file-close-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  transition: opacity 0.15s, background 0.15s;
+}
+.file-item:hover .file-close-btn {
+  opacity: 0.6;
+}
+.file-item.active .file-close-btn {
+  opacity: 0.8;
+}
+.file-close-btn:hover {
+  opacity: 1 !important;
+  background: rgba(255, 255, 255, 0.1);
+}
+.file-close-btn svg {
+  width: 14px;
+  height: 14px;
 }
 </style>

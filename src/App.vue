@@ -18,6 +18,7 @@
         @open-files="openFiles"
         @select-file="selectFile"
         @new-file="createNewFile"
+        @close-file="closeFile"
       />
 
       <div class="editor-area">
@@ -111,6 +112,28 @@ function onDrop(e) {
   if (droppedFiles.length > 0) {
     addFiles(droppedFiles);
     selectFile(droppedFiles[0]);
+  }
+}
+
+async function closeFile(path) {
+  if (currentFile.value === path && isDirty.value) {
+    await saveFile();
+  }
+  
+  const idx = files.value.findIndex(f => f.path === path);
+  if (idx !== -1) {
+    files.value.splice(idx, 1);
+  }
+
+  if (currentFile.value === path) {
+    if (files.value.length > 0) {
+      const nextIdx = Math.min(idx, files.value.length - 1);
+      await selectFile(files.value[nextIdx].path);
+    } else {
+      currentFile.value = null;
+      currentContent.value = '';
+      isDirty.value = false;
+    }
   }
 }
 
