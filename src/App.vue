@@ -22,6 +22,35 @@
       />
 
       <div class="editor-area">
+        <!-- Tabs -->
+        <div v-show="files.length > 0" class="tabs-bar">
+          <div
+            v-for="file in files"
+            :key="file.path"
+            class="tab"
+            :class="{ active: currentFile === file.path }"
+            @click="selectFile(file.path)"
+            :title="file.path"
+          >
+            <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <span class="tab-name">{{ file.name }}</span>
+            <span v-if="currentFile === file.path && isDirty" class="tab-dirty">●</span>
+            <button
+              class="tab-close-btn"
+              @click.stop="closeFile(file.path)"
+              title="Fermer"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
         <!-- Toolbar -->
         <EditorToolbar
           v-if="currentFile"
@@ -232,6 +261,96 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  background: #2e3440;
+}
+
+/* ---- Tabs ---- */
+.tabs-bar {
+  display: flex;
+  align-items: center;
+  background: #252932;
+  overflow-x: auto;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+.tabs-bar::-webkit-scrollbar {
+  height: 4px;
+}
+.tabs-bar::-webkit-scrollbar-thumb {
+  background: #4c566a;
+  border-radius: 4px;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 12px;
+  background: #272c36;
+  color: #8490a8;
+  border-right: 1px solid #1c1f26;
+  cursor: pointer;
+  min-width: 120px;
+  max-width: 200px;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+}
+.tab:hover {
+  background: #2e3440;
+}
+.tab.active {
+  background: #2e3440;
+  color: #eceff4;
+  border-top: 2px solid #88c0d0;
+}
+
+.tab-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.tab-name {
+  flex: 1;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-dirty {
+  color: #88c0d0;
+  font-size: 10px;
+  margin-left: -4px;
+}
+
+.tab-close-btn {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+}
+.tab:hover .tab-close-btn {
+  opacity: 0.6;
+}
+.tab.active .tab-close-btn {
+  opacity: 0.8;
+}
+.tab-close-btn:hover {
+  opacity: 1 !important;
+  background: rgba(255, 255, 255, 0.1);
+}
+.tab-close-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* ---- Écran d'accueil ---- */
