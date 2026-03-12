@@ -24,10 +24,22 @@
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { Crepe } from '@milkdown/crepe';
 import { replaceAll } from '@milkdown/kit/utils';
-import { editorViewCtx } from '@milkdown/kit/core';
+import { editorViewCtx, commandsCtx } from '@milkdown/kit/core';
 import { undo, redo } from '@milkdown/kit/prose/history';
+import { gfm } from '@milkdown/kit/preset/gfm';
+import { slashFactory, SlashProvider } from '@milkdown/kit/plugin/slash';
+import {
+  wrapInHeadingCommand,
+  wrapInBulletListCommand,
+  wrapInOrderedListCommand,
+  wrapInBlockquoteCommand,
+  createCodeBlockCommand,
+  insertHrCommand,
+} from '@milkdown/kit/preset/commonmark';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/frame-dark.css';
+
+const slash = slashFactory('myMarkdown');
 
 const props = defineProps({
   content: { type: String, default: '' },
@@ -42,9 +54,57 @@ const rawText = ref(props.content);
 let crepe = null;
 let _replacing = false;
 
+function callCmd(cmd, arg) {
+  crepe?.editor.action((ctx) => {
+    ctx.get(commandsCtx).call(cmd.key, arg);
+  });
+}
+
+function buildSlashMenu(editorView) {
+  const menu = document.createElement('div');
+  menu.className = 'slash-dropdown';
+  const items = [
+    { label: 'Titre 1',          icon: 'H1',  action: () => callCmd(wrapInHeadingCommand, 1) },
+    { label: 'Titre 2',          icon: 'H2',  action: () => callCmd(wrapInHeadingCommand, 2) },
+    { label: 'Titre 3',          icon: 'H3',  action: () => callCmd(wrapInHeadingCommand, 3) },
+    { label: 'Liste à puces',    icon: '•',   action: () => callCmd(wrapInBulletListCommand) },
+    { label: 'Liste numérotée',  icon: '1.',  action: () => callCmd(wrapInOrderedListCommand) },
+    { label: 'Citation',         icon: '"',   action: () => callCmd(wrapInBlockquoteCommand) },
+    { label: 'Bloc de code',     icon: '</>',  action: () => callCmd(createCodeBlockCommand) },
+    { label: 'Séparateur',       icon: '―',   action: () => callCmd(insertHrCommand) },
+  ];
+  items.forEach(({ label, icon, action }) => {
+    const item = document.createElement('div');
+    item.className = 'slash-item';
+    item.innerHTML = `<span class="slash-icon">${icon}</span><span>${label}</span>`;
+    item.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const { state, dispatch } = editorView;
+      const { from } = state.selection;
+      dispatch(state.tr.delete(from - 1, from));
+      action();
+    });
+    menu.appendChild(item);
+  });
+  return menu;
+}
+
 async function initCrepe(content) {
   if (!rootRef.value) return;
   crepe = new Crepe({ root: rootRef.value, defaultValue: content });
+  crepe.editor.use(gfm);
+  crepe.editor.use(slash);
+  crepe.editor.config((ctx) => {
+    ctx.set(slash.key, {
+      view(editorView) {
+        const provider = new SlashProvider({ content: buildSlashMenu(editorView) });
+        return {
+          update: (view, prevState) => provider.update(view, prevState),
+          destroy: () => provider.destroy(),
+        };
+      },
+    });
+  });
   crepe.on((listener) => {
     listener.markdownUpdated(() => {
       if (!_replacing) emit('dirty');
@@ -185,6 +245,42 @@ defineExpose({ getContent, toggleMode, triggerUndo, triggerRedo, triggerCopy, tr
 .crepe-root .milkdown-root,
 .crepe-root .editor {
   background: transparent;
+}
+
+/* Menu slash flottant */
+.slash-dropdown {
+  background: #3b4252;
+  border: 1px solid #4c566a;
+  border-radius: 6px;
+  padding: 4px;
+  min-width: 200px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+}
+
+.slash-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #d8dee9;
+  font-size: 13px;
+}
+
+.slash-item:hover {
+  background: #434c5e;
+}
+
+.slash-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #88c0d0;
 }
 
 /* Zone de texte brut */

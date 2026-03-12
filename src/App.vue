@@ -38,6 +38,7 @@
             </svg>
             <span class="tab-name">{{ file.name }}</span>
             <span v-if="currentFile === file.path && isDirty" class="tab-dirty">●</span>
+            <span v-else class="tab-clean">●</span>
             <button
               class="tab-close-btn"
               @click.stop="closeFile(file.path)"
@@ -321,6 +322,12 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
 
 .tab-dirty {
   color: #88c0d0;
+  font-size: 10px;
+  margin-left: -4px;
+}
+
+.tab-clean {
+  color: transparent;
   font-size: 10px;
   margin-left: -4px;
 }
