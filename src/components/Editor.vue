@@ -26,6 +26,7 @@ import { Crepe } from '@milkdown/crepe';
 import { replaceAll } from '@milkdown/kit/utils';
 import { editorViewCtx } from '@milkdown/kit/core';
 import { undo, redo } from '@milkdown/kit/prose/history';
+import { gfm } from '@milkdown/kit/preset/gfm';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/frame-dark.css';
 
@@ -41,28 +42,34 @@ const mode = ref('wysiwyg');
 const rawText = ref(props.content);
 let crepe = null;
 let _replacing = false;
+let _editorReady = false;
 
 async function initCrepe(content) {
   if (!rootRef.value) return;
+  _editorReady = false;
   crepe = new Crepe({ root: rootRef.value, defaultValue: content });
+  crepe.editor.use(gfm);
   crepe.on((listener) => {
     listener.markdownUpdated(() => {
       if (!_replacing) emit('dirty');
     });
   });
   await crepe.create();
+  _editorReady = true;
 }
 
 onMounted(() => initCrepe(props.content));
 
 onUnmounted(() => {
+  _editorReady = false;
   crepe?.destroy();
   crepe = null;
 });
 
 async function toggleMode() {
   if (mode.value === 'wysiwyg') {
-    rawText.value = crepe?.getMarkdown() ?? rawText.value;
+    rawText.value = (_editorReady ? crepe?.getMarkdown() : null) ?? rawText.value;
+    _editorReady = false;
     await crepe?.destroy();
     crepe = null;
     mode.value = 'text';
@@ -80,7 +87,7 @@ watch(
   () => props.content,
   (newContent) => {
     rawText.value = newContent;
-    if (mode.value === 'wysiwyg' && crepe) {
+    if (mode.value === 'wysiwyg' && crepe && _editorReady) {
       _replacing = true;
       crepe.editor.action(replaceAll(newContent));
       Promise.resolve().then(() => { _replacing = false; });
@@ -143,7 +150,7 @@ async function triggerPaste() {
 }
 
 function getContent() {
-  if (mode.value === 'wysiwyg') return crepe?.getMarkdown() ?? rawText.value;
+  if (mode.value === 'wysiwyg') return (_editorReady ? crepe?.getMarkdown() : null) ?? rawText.value;
   return rawText.value;
 }
 
