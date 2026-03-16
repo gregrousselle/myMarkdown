@@ -137,7 +137,8 @@ async function openFiles() {
 function onDrop(e) {
   const droppedFiles = Array.from(e.dataTransfer.files)
     .filter(f => f.name.endsWith('.md'))
-    .map(f => f.path);
+    .map(f => f.path)
+    .filter(Boolean);
   
   if (droppedFiles.length > 0) {
     addFiles(droppedFiles);
