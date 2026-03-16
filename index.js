@@ -71,6 +71,39 @@ ipcMain.handle('fs:write-file', (_event, filePath, content) => {
   }
 });
 
+const watchers = new Map();
+
+ipcMain.handle('fs:watch-file', (event, filePath) => {
+  if (watchers.has(filePath)) return;
+  try {
+    let timeout;
+    const watcher = fs.watch(filePath, (eventType) => {
+      if (eventType === 'change') {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+          try {
+            const content = fs.readFileSync(filePath, 'utf-8');
+            event.sender.send('file-changed', filePath, content);
+          } catch (err) {
+            // Ignore read errors
+          }
+        }, 100);
+      }
+    });
+    watchers.set(filePath, watcher);
+  } catch (err) {
+    console.error('Cannot watch file', filePath);
+  }
+});
+
+ipcMain.handle('fs:unwatch-file', (event, filePath) => {
+  const watcher = watchers.get(filePath);
+  if (watcher) {
+    watcher.close();
+    watchers.delete(filePath);
+  }
+});
+
 ipcMain.handle('dialog:save-new-file', async () => {
   const result = await dialog.showSaveDialog({
     filters: [{ name: 'Markdown', extensions: ['md'] }],

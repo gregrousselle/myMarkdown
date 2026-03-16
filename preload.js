@@ -7,4 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readFile:   (filePath)            => ipcRenderer.invoke('fs:read-file',  filePath),
   writeFile:  (filePath, content)   => ipcRenderer.invoke('fs:write-file', filePath, content),
   saveNewFile:() => ipcRenderer.invoke('dialog:save-new-file'),
+  watchFile:  (filePath) => ipcRenderer.invoke('fs:watch-file', filePath),
+  unwatchFile:(filePath) => ipcRenderer.invoke('fs:unwatch-file', filePath),
+  onFileChanged: (callback) => ipcRenderer.on('file-changed', callback),
 });

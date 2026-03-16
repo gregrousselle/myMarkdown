@@ -118,6 +118,9 @@ function addFiles(filePaths) {
   newFiles.forEach(newFile => {
     if (!files.value.find(f => f.path === newFile.path)) {
       files.value.push(newFile);
+      if (window.electronAPI.watchFile) {
+        window.electronAPI.watchFile(newFile.path);
+      }
     }
   });
 
@@ -152,6 +155,9 @@ async function closeFile(path) {
   const idx = files.value.findIndex(f => f.path === path);
   if (idx !== -1) {
     files.value.splice(idx, 1);
+    if (window.electronAPI.unwatchFile) {
+      window.electronAPI.unwatchFile(path);
+    }
   }
 
   if (currentFile.value === path) {
@@ -197,7 +203,24 @@ function onKeydown(e) {
   }
 }
 
-onMounted(() => document.addEventListener('keydown', onKeydown));
+onMounted(() => {
+  document.addEventListener('keydown', onKeydown);
+  
+  if (window.electronAPI.onFileChanged) {
+    window.electronAPI.onFileChanged((_event, filePath, newContent) => {
+      if (currentFile.value === filePath) {
+        // Obtenir le contenu actuel (sans les retours à la ligne normalisés de macOS/Windows)
+        const currentEditorContent = editorRef.value?.getContent() ?? currentContent.value;
+        
+        // Si le contenu a réellement changé (c'est-à-dire pas suite à notre propre sauvegarde)
+        if (newContent !== currentEditorContent) {
+          currentContent.value = newContent;
+          isDirty.value = false;
+        }
+      }
+    });
+  }
+});
 onUnmounted(() => document.removeEventListener('keydown', onKeydown));
 </script>
 
