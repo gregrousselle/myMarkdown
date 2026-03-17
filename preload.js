@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   openFolder: () => ipcRenderer.invoke('dialog:open-folder'), // kept if needed elsewhere, but user wants to remove "openFolder" behaviour.
@@ -10,4 +10,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   watchFile:  (filePath) => ipcRenderer.invoke('fs:watch-file', filePath),
   unwatchFile:(filePath) => ipcRenderer.invoke('fs:unwatch-file', filePath),
   onFileChanged: (callback) => ipcRenderer.on('file-changed', callback),
+  getFilePath: (file) => webUtils.getPathForFile(file),
 });

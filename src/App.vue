@@ -140,7 +140,9 @@ async function openFiles() {
 function onDrop(e) {
   const droppedFiles = Array.from(e.dataTransfer.files)
     .filter(f => f.name.endsWith('.md'))
-    .map(f => f.path)
+    // Dans Electron, pour des raisons de sécurité, 'path' n'est plus toujours accessible
+    // On utilise electronAPI ou f.path s'il existe (comportement d'Electron classique)
+    .map(f => window.electronAPI.getFilePath ? window.electronAPI.getFilePath(f) : f.path)
     .filter(Boolean);
   
   if (droppedFiles.length > 0) {
