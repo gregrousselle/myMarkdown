@@ -7,7 +7,28 @@
     "vite:dev": "vite",
     "electron:dev": "electron .",
     "dev": "concurrently -k \"npm run vite:dev\" \"wait-on http://localhost:5173 && npm run electron:dev\"",
-    "build": "vite build"
+    "build": "vite build",
+    "package:mac": "npm run build && electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.gregoire.mymarkdown",
+    "productName": "MyMarkdown",
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "files": [
+      "dist/**/*",
+      "index.js",
+      "preload.js",
+      "package.json"
+    ]
   },
   "keywords": [],
   "author": "",
@@ -15,12 +36,13 @@
   "dependencies": {
     "@milkdown/crepe": "^7.19.0",
     "@milkdown/kit": "*",
-    "electron": "^40.8.0",
     "vue": "^3.4.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.0",
     "concurrently": "^9.0.0",
+    "electron": "^41.0.2",
+    "electron-builder": "^26.8.1",
     "vite": "^7.3.1",
     "wait-on": "^8.0.0"
   }
