@@ -15,9 +15,15 @@
         <span v-show="isOpen" class="folder-name">Fichiers ouverts</span>
       </div>
       <div v-show="isOpen" class="sidebar-actions">
-        <button @click="$emit('open-files')" class="btn-icon" title="Ouvrir un ou plusieurs fichiers">
+        <button @click="$emit('open-folder')" class="btn-icon" title="Ouvrir un dossier">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+        </button>
+        <button @click="$emit('open-files')" class="btn-icon" title="Ouvrir un ou plusieurs fichiers">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
           </svg>
         </button>
         <button
@@ -33,33 +39,61 @@
       </div>
     </div>
 
-    <div v-show="isOpen" class="sidebar-files">
-      <p v-if="files.length === 0" class="empty-state">
-        Ouvrez des fichiers ou glissez-les ici pour commencer
-      </p>
-      <div
-        v-for="file in files"
-        :key="file.path"
-        @click="$emit('select-file', file.path)"
-        class="file-item"
-        :class="{ active: currentFile === file.path }"
-        :title="file.name"
-      >
-        <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-        </svg>
-        <span class="file-name">{{ file.name }}</span>
-        <button
-          @click.stop="$emit('close-file', file.path)"
-          class="file-close-btn"
-          title="Fermer le fichier"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
+    <div v-show="isOpen" class="sidebar-content">
+      <!-- Folder Tree Section -->
+      <div v-if="fileTree" class="sidebar-section">
+        <div class="section-header">
+          <span class="section-title">DOSSIER : {{ fileTree.name }}</span>
+          <button @click="$emit('close-folder')" class="btn-icon-sm" title="Fermer le dossier">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="tree-container">
+          <FileTreeItem
+            :item="fileTree"
+            :currentFile="currentFile"
+            @select-file="$emit('select-file', $event)"
+          />
+        </div>
+      </div>
+
+      <!-- Opened Files Section -->
+      <div class="sidebar-section">
+        <div class="section-header">
+          <span class="section-title">Fichiers ouverts</span>
+        </div>
+        <div class="sidebar-files">
+          <p v-if="files.length === 0" class="empty-state">
+            Aucun fichier ouvert
+          </p>
+          <div
+            v-for="file in files"
+            :key="file.path"
+            @click="$emit('select-file', file.path)"
+            class="file-item"
+            :class="{ active: currentFile === file.path }"
+            :title="file.name"
+          >
+            <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <span class="file-name">{{ file.name }}</span>
+            <button
+              @click.stop="$emit('close-file', file.path)"
+              class="file-close-btn"
+              title="Fermer le fichier"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
     
@@ -70,13 +104,15 @@
 
 <script setup>
 import { ref } from 'vue';
+import FileTreeItem from './FileTreeItem.vue';
 
 defineProps({
   files:       { type: Array,  default: () => [] },
   currentFile: { type: String, default: null },
+  fileTree:    { type: Object, default: null },
 });
 
-defineEmits(['open-files', 'select-file', 'new-file', 'close-file']);
+defineEmits(['open-files', 'open-folder', 'select-file', 'new-file', 'close-file', 'close-folder']);
 
 const sidebarWidth = ref(230);
 const isResizing = ref(false);
@@ -177,6 +213,51 @@ const stopResize = () => {
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.section-header {
+  padding: 12px 12px 6px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: #4c566a;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.btn-icon-sm {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  color: #4c566a;
+  display: flex;
+  align-items: center;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-icon-sm svg { width: 12px; height: 12px; }
+.btn-icon-sm:hover { background: #3b4252; color: #d8dee9; }
+
+.tree-container {
+  padding: 4px 0;
 }
 
 .sidebar-actions {
