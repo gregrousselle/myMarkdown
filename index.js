@@ -54,6 +54,46 @@ ipcMain.handle('fs:read-dir', (_event, folderPath) => {
   }
 });
 
+function getFileTree(folderPath) {
+  try {
+    const name = path.basename(folderPath);
+    const entries = fs.readdirSync(folderPath, { withFileTypes: true });
+    const children = [];
+
+    for (const entry of entries) {
+      const fullPath = path.join(folderPath, entry.name);
+      if (entry.isDirectory()) {
+        const childTree = getFileTree(fullPath);
+        if (childTree && (childTree.children.length > 0)) {
+          children.push(childTree);
+        }
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        children.push({
+          name: entry.name,
+          path: fullPath,
+          type: 'file'
+        });
+      }
+    }
+
+    return {
+      name,
+      path: folderPath,
+      type: 'directory',
+      children: children.sort((a, b) => {
+        if (a.type === b.type) return a.name.localeCompare(b.name);
+        return a.type === 'directory' ? -1 : 1;
+      })
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+ipcMain.handle('fs:get-tree', (_event, folderPath) => {
+  return getFileTree(folderPath);
+});
+
 ipcMain.handle('fs:read-file', (_event, filePath) => {
   try {
     return fs.readFileSync(filePath, 'utf-8');

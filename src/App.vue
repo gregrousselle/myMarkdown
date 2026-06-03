@@ -15,10 +15,13 @@
       <Sidebar
         :files="files"
         :currentFile="currentFile"
+        :fileTree="fileTree"
         @open-files="openFiles"
+        @open-folder="openFolder"
         @select-file="selectFile"
         @new-file="createNewFile"
         @close-file="closeFile"
+        @close-folder="fileTree = null"
       />
 
       <div class="editor-area">
@@ -83,7 +86,10 @@
             </svg>
             <h1>MyMarkdown</h1>
             <p>Éditeur Markdown propulsé par Milkdown &amp; Vue.js</p>
-            <button @click="openFiles" class="btn-primary">Ouvrir des fichiers</button>
+            <div class="welcome-buttons">
+              <button @click="openFiles" class="btn-primary">Ouvrir des fichiers</button>
+              <button @click="openFolder" class="btn-secondary">Ouvrir un dossier</button>
+            </div>
           </div>
         </div>
       </div>
@@ -99,6 +105,7 @@ import EditorToolbar from './components/EditorToolbar.vue';
 
 const files        = ref([]);
 const currentFile  = ref(null);
+const fileTree     = ref(null);
 const currentContent = ref('');
 const isDirty      = ref(false);
 const editorRef    = ref(null);
@@ -135,6 +142,13 @@ async function openFiles() {
   if (!selectedFiles || selectedFiles.length === 0) return;
   addFiles(selectedFiles);
   await selectFile(selectedFiles[0]);
+}
+
+async function openFolder() {
+  const folderPath = await window.electronAPI.openFolder();
+  if (!folderPath) return;
+  const tree = await window.electronAPI.getTree(folderPath);
+  fileTree.value = tree;
 }
 
 function onDrop(e) {
@@ -421,18 +435,35 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
   color: #616e88;
 }
 
+.welcome-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
 .btn-primary {
   background: #5e81ac;
   color: #eceff4;
   border: none;
-  padding: 10px 28px;
+  padding: 10px 24px;
   border-radius: 6px;
   font-size: 14px;
   cursor: pointer;
   transition: background 0.15s;
-  margin-top: 8px;
 }
 .btn-primary:hover { background: #81a1c1; }
+
+.btn-secondary {
+  background: #4c566a;
+  color: #eceff4;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-secondary:hover { background: #616e88; }
 
 .btn-icon {
   background: transparent;
