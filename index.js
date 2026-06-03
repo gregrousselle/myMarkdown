@@ -94,17 +94,36 @@ ipcMain.handle('fs:get-tree', (_event, folderPath) => {
   return getFileTree(folderPath);
 });
 
-ipcMain.handle('fs:read-file', (_event, filePath) => {
+ipcMain.handle('fs:read-file', async (_event, filePath) => {
   try {
-    return fs.readFileSync(filePath, 'utf-8');
+    return await fs.promises.readFile(filePath, 'utf-8');
   } catch {
     return '';
   }
 });
 
-ipcMain.handle('fs:write-file', (_event, filePath, content) => {
+ipcMain.handle('fs:write-file', async (_event, filePath, content) => {
   try {
-    fs.writeFileSync(filePath, content, 'utf-8');
+    await fs.promises.writeFile(filePath, content, 'utf-8');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('fs:rename', async (_event, oldPath, newPath) => {
+  try {
+    await fs.promises.rename(oldPath, newPath);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('fs:delete', async (_event, filePath) => {
+  try {
+    const { shell } = require('electron');
+    await shell.trashItem(filePath);
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
@@ -112,6 +131,31 @@ ipcMain.handle('fs:write-file', (_event, filePath, content) => {
 });
 
 const watchers = new Map();
+const treeWatchers = new Map();
+
+ipcMain.handle('fs:watch-folder', (event, folderPath) => {
+  if (treeWatchers.has(folderPath)) return;
+  try {
+    let timeout;
+    const watcher = fs.watch(folderPath, { recursive: true }, (eventType, filename) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        event.sender.send('tree-changed', folderPath);
+      }, 200);
+    });
+    treeWatchers.set(folderPath, watcher);
+  } catch (err) {
+    console.error('Cannot watch folder', folderPath, err);
+  }
+});
+
+ipcMain.handle('fs:unwatch-folder', (event, folderPath) => {
+  const watcher = treeWatchers.get(folderPath);
+  if (watcher) {
+    watcher.close();
+    treeWatchers.delete(folderPath);
+  }
+});
 
 ipcMain.handle('fs:watch-file', (event, filePath) => {
   if (watchers.has(filePath)) return;
@@ -143,6 +187,10 @@ ipcMain.handle('fs:unwatch-file', (event, filePath) => {
     watchers.delete(filePath);
   }
 });
+
+ipcMain.handle('path:join', (_event, ...args) => path.join(...args));
+ipcMain.handle('path:dirname', (_event, p) => path.dirname(p));
+ipcMain.handle('path:basename', (_event, p) => path.basename(p));
 
 ipcMain.handle('dialog:save-new-file', async () => {
   const result = await dialog.showSaveDialog({

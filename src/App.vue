@@ -21,7 +21,7 @@
         @select-file="selectFile"
         @new-file="createNewFile"
         @close-file="closeFile"
-        @close-folder="fileTree = null"
+        @close-folder="closeFolder"
       />
 
       <div class="editor-area">
@@ -111,17 +111,21 @@ const isDirty      = ref(false);
 const editorRef    = ref(null);
 const editorMode   = ref('wysiwyg');
 
-const currentFileName = computed(() => {
-  if (!currentFile.value) return null;
-  return currentFile.value.split('/').pop();
-});
+const currentFileName = ref(null);
 
-function addFiles(filePaths) {
-  const newFiles = filePaths.map(path => {
-    // Convert path to have single standard separator for splitting easily across OS
-    const normalizedPath = path.replace(/\\/g, '/');
-    return { path, name: normalizedPath.split('/').pop() };
-  });
+async function updateCurrentFileName() {
+  if (!currentFile.value) {
+    currentFileName.value = null;
+    return;
+  }
+  currentFileName.value = await window.electronAPI.pathBasename(currentFile.value);
+}
+
+async function addFiles(filePaths) {
+  const newFiles = await Promise.all(filePaths.map(async (filePath) => {
+    const name = await window.electronAPI.pathBasename(filePath);
+    return { path: filePath, name };
+  }));
 
   newFiles.forEach(newFile => {
     if (!files.value.find(f => f.path === newFile.path)) {
@@ -147,7 +151,20 @@ async function openFiles() {
 async function openFolder() {
   const folderPath = await window.electronAPI.openFolder();
   if (!folderPath) return;
+
+  // Si un dossier était déjà ouvert, on arrête de le surveiller
+  if (fileTree.value) {
+    window.electronAPI.unwatchFolder(fileTree.value.path);
+  }
+
   const tree = await window.electronAPI.getTree(folderPath);
+  fileTree.value = tree;
+  window.electronAPI.watchFolder(folderPath);
+}
+
+async function refreshTree() {
+  if (!fileTree.value) return;
+  const tree = await window.electronAPI.getTree(fileTree.value.path);
   fileTree.value = tree;
 }
 
@@ -190,11 +207,32 @@ async function closeFile(path) {
   }
 }
 
+function closeFolder() {
+  if (fileTree.value) {
+    window.electronAPI.unwatchFolder(fileTree.value.path);
+    fileTree.value = null;
+  }
+}
+
 async function selectFile(filePath) {
   if (isDirty.value) {
     await saveFile();
   }
+
+  // S'assurer que le fichier est ouvert dans un onglet
+  if (!files.value.find(f => f.path === filePath)) {
+    const name = await window.electronAPI.pathBasename(filePath);
+    files.value.push({
+      path: filePath,
+      name: name
+    });
+    if (window.electronAPI.watchFile) {
+      window.electronAPI.watchFile(filePath);
+    }
+  }
+
   currentFile.value = filePath;
+  await updateCurrentFileName();
   const content = await window.electronAPI.readFile(filePath);
   currentContent.value = content;
   isDirty.value = false;
@@ -236,6 +274,17 @@ onMounted(() => {
           isDirty.value = false;
         }
       }
+    });
+  }
+
+  if (window.electronAPI.onTreeChanged) {
+    window.electronAPI.onTreeChanged(async () => {
+      await refreshTree();
+
+      // Après un rafraîchissement de l'arborescence, on vérifie si les fichiers ouverts existent toujours
+      // ou ont été renommés (pas facile à deviner, mais on peut au moins nettoyer ceux qui n'existent plus)
+      // Pour l'instant, on se contente de rafraîchir l'arborescence.
+      // Une amélioration future serait de suivre les renommages.
     });
   }
 });
