@@ -32,3 +32,29 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #616e88;
 }
+
+@media print {
+  .titlebar,
+  .sidebar,
+  .tabs-bar,
+  .toolbar,
+  .toc,
+  .welcome-buttons {
+    display: none !important;
+  }
+
+  .app, .main, .editor-area, .editor-with-toc, .editor-wrapper {
+    display: block !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  .crepe-root {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  .crepe-root .milkdown {
+    --crepe-color-background: white !important;
+  }
+}

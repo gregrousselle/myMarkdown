@@ -54,6 +54,21 @@ ipcMain.handle('fs:read-dir', (_event, folderPath) => {
   }
 });
 
+ipcMain.handle('fs:get-templates', async () => {
+  const templatesDir = path.join(__dirname, 'templates');
+  try {
+    const files = fs.readdirSync(templatesDir);
+    return files
+      .filter(f => f.endsWith('.md'))
+      .map(f => ({
+        name: f.replace('.md', '').split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+        content: fs.readFileSync(path.join(templatesDir, f), 'utf-8')
+      }));
+  } catch {
+    return [];
+  }
+});
+
 function getFileTree(folderPath) {
   try {
     const name = path.basename(folderPath);
@@ -108,6 +123,42 @@ ipcMain.handle('fs:write-file', async (_event, filePath, content) => {
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
+  }
+});
+
+function searchInDir(dir, query, results = []) {
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      searchInDir(fullPath, query, results);
+    } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      const content = fs.readFileSync(fullPath, 'utf-8');
+      if (content.toLowerCase().includes(query.toLowerCase())) {
+        const lines = content.split('\n');
+        const matches = lines
+          .map((line, index) => ({ line, index }))
+          .filter(({ line }) => line.toLowerCase().includes(query.toLowerCase()))
+          .slice(0, 3); // Limit to 3 matches per file
+
+        results.push({
+          path: fullPath,
+          name: entry.name,
+          matches
+        });
+      }
+    }
+  }
+  return results;
+}
+
+ipcMain.handle('fs:search', async (_event, folderPath, query) => {
+  if (!query || query.length < 2) return [];
+  try {
+    return searchInDir(folderPath, query);
+  } catch (err) {
+    console.error('Search error:', err);
+    return [];
   }
 });
 
@@ -191,6 +242,31 @@ ipcMain.handle('fs:unwatch-file', (event, filePath) => {
 ipcMain.handle('path:join', (_event, ...args) => path.join(...args));
 ipcMain.handle('path:dirname', (_event, p) => path.dirname(p));
 ipcMain.handle('path:basename', (_event, p) => path.basename(p));
+
+ipcMain.handle('export:pdf', async (event, filePath) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const pdfPath = filePath.replace(/\.md$/, '.pdf');
+
+  const result = await dialog.showSaveDialog(win, {
+    title: 'Exporter en PDF',
+    defaultPath: pdfPath,
+    filters: [{ name: 'PDF', extensions: ['pdf'] }]
+  });
+
+  if (result.canceled || !result.filePath) return { success: false };
+
+  try {
+    const data = await win.webContents.printToPDF({
+      printBackground: true,
+      marginsType: 1, // Default margins
+      pageSize: 'A4'
+    });
+    fs.writeFileSync(result.filePath, data);
+    return { success: true, path: result.filePath };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
 
 ipcMain.handle('dialog:save-new-file', async () => {
   const result = await dialog.showSaveDialog({

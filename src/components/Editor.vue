@@ -13,7 +13,7 @@
       ref="textareaRef"
       class="text-editor"
       v-model="rawText"
-      @input="emit('dirty')"
+      @input="onTextareaInput"
       spellcheck="false"
     />
 
@@ -27,6 +27,10 @@ import { replaceAll } from '@milkdown/kit/utils';
 import { editorViewCtx } from '@milkdown/kit/core';
 import { undo, redo } from '@milkdown/kit/prose/history';
 import { gfm } from '@milkdown/kit/preset/gfm';
+import { diagram } from '@milkdown/plugin-diagram';
+import { $remark } from '@milkdown/kit/utils';
+import remarkFrontmatter from 'remark-frontmatter';
+import remarkWikiLink from 'remark-wiki-link';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/frame-dark.css';
 
@@ -34,7 +38,7 @@ const props = defineProps({
   content: { type: String, default: '' },
 });
 
-const emit = defineEmits(['dirty', 'mode-change']);
+const emit = defineEmits(['dirty', 'mode-change', 'content-update']);
 
 const rootRef = ref(null);
 const textareaRef = ref(null);
@@ -44,14 +48,24 @@ let crepe = null;
 let _replacing = false;
 let _editorReady = false;
 
+const frontmatterPlugin = $remark('remarkFrontmatter', () => remarkFrontmatter);
+const wikiLinkPlugin = $remark('remarkWikiLink', () => remarkWikiLink, {
+  aliasTag: 'name',
+  pageResolver: (name) => [name.replace(/ /g, '-').toLowerCase()],
+  hrefTemplate: (permalink) => `wikilink:${permalink}`
+});
+
 async function initCrepe(content) {
   if (!rootRef.value) return;
   _editorReady = false;
   crepe = new Crepe({ root: rootRef.value, defaultValue: content });
-  crepe.editor.use(gfm);
+  crepe.editor.use(gfm).use(diagram).use(frontmatterPlugin).use(wikiLinkPlugin);
   crepe.on((listener) => {
     listener.markdownUpdated(() => {
-      if (!_replacing) emit('dirty');
+      if (!_replacing) {
+        emit('dirty');
+        emit('content-update', crepe.getMarkdown());
+      }
     });
   });
   await crepe.create();
@@ -78,6 +92,11 @@ async function toggleMode() {
     await nextTick();
     await initCrepe(rawText.value);
   }
+}
+
+function onTextareaInput() {
+  emit('dirty');
+  emit('content-update', rawText.value);
 }
 
 watch(mode, (val) => emit('mode-change', val));

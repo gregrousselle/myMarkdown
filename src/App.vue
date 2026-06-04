@@ -66,15 +66,19 @@
           @copy="editorRef?.triggerCopy()"
           @paste="editorRef?.triggerPaste()"
           @toggle-mode="editorRef?.toggleMode()"
+          @export-pdf="exportPDF"
         />
 
-        <Editor
-          v-if="currentFile"
-          ref="editorRef"
-          :content="currentContent"
-          @dirty="isDirty = true"
-          @mode-change="editorMode = $event"
-        />
+        <div v-if="currentFile" class="editor-with-toc">
+          <Editor
+            ref="editorRef"
+            :content="currentContent"
+            @dirty="isDirty = true"
+            @mode-change="editorMode = $event"
+            @content-update="currentContent = $event"
+          />
+          <TableOfContents :content="currentContent" />
+        </div>
         <div v-else class="welcome">
           <div class="welcome-inner">
             <svg class="welcome-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -95,6 +99,12 @@
       </div>
     </div>
   </div>
+
+  <TemplateModal
+    :show="showTemplateModal"
+    @close="showTemplateModal = false"
+    @select="onTemplateSelect"
+  />
 </template>
 
 <script setup>
@@ -102,6 +112,8 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import Sidebar from './components/Sidebar.vue';
 import Editor from './components/Editor.vue';
 import EditorToolbar from './components/EditorToolbar.vue';
+import TableOfContents from './components/TableOfContents.vue';
+import TemplateModal from './components/TemplateModal.vue';
 
 const files        = ref([]);
 const currentFile  = ref(null);
@@ -110,6 +122,7 @@ const currentContent = ref('');
 const isDirty      = ref(false);
 const editorRef    = ref(null);
 const editorMode   = ref('wysiwyg');
+const showTemplateModal = ref(false);
 
 const currentFileName = ref(null);
 
@@ -246,10 +259,27 @@ async function saveFile() {
 }
 
 async function createNewFile() {
+  showTemplateModal.value = true;
+}
+
+async function onTemplateSelect(content) {
+  showTemplateModal.value = false;
   const filePath = await window.electronAPI.saveNewFile();
   if (!filePath) return;
+
+  await window.electronAPI.writeFile(filePath, content);
   addFiles([filePath]);
   await selectFile(filePath);
+}
+
+async function exportPDF() {
+  if (!currentFile.value) return;
+  const result = await window.electronAPI.exportPDF(currentFile.value);
+  if (result.success) {
+    alert(`Exportation réussie : ${result.path}`);
+  } else if (result.error) {
+    alert(`Erreur d'exportation : ${result.error}`);
+  }
 }
 
 function onKeydown(e) {
@@ -259,8 +289,43 @@ function onKeydown(e) {
   }
 }
 
+async function handleWikiLink(link) {
+  if (!fileTree.value) return;
+  const permalink = link.replace('wikilink:', '');
+
+  // Search for the file in the tree
+  const findFile = (node, name) => {
+    if (node.type === 'file' && node.name.toLowerCase().replace(/\.md$/, '').replace(/ /g, '-') === name) {
+      return node.path;
+    }
+    if (node.children) {
+      for (const child of node.children) {
+        const found = findFile(child, name);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const filePath = findFile(fileTree.value, permalink);
+  if (filePath) {
+    await selectFile(filePath);
+  } else {
+    alert(`Fichier non trouvé : ${permalink}`);
+  }
+}
+
 onMounted(() => {
   document.addEventListener('keydown', onKeydown);
+
+  // Écouter les clics sur les liens wiki (via un événement global délégué car Milkdown est hors Vue)
+  document.addEventListener('click', async (e) => {
+    const anchor = e.target.closest('a');
+    if (anchor && anchor.getAttribute('href')?.startsWith('wikilink:')) {
+      e.preventDefault();
+      await handleWikiLink(anchor.getAttribute('href'));
+    }
+  });
   
   if (window.electronAPI.onFileChanged) {
     window.electronAPI.onFileChanged((_event, filePath, newContent) => {
@@ -352,6 +417,12 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
   display: flex;
   flex-direction: column;
   background: #2e3440;
+}
+
+.editor-with-toc {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
 }
 
 /* ---- Tabs ---- */
