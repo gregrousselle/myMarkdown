@@ -16,8 +16,13 @@
     "@milkdown/crepe": "^7.19.0",
     "@milkdown/kit": "*",
     "@milkdown/plugin-diagram": "^7.7.0",
+    "@milkdown/plugin-prism": "^7.21.2",
+    "@milkdown/transformer": "^7.21.2",
     "electron": "^40.8.0",
     "mermaid": "^11.15.0",
+    "prismjs": "^1.30.0",
+    "remark-frontmatter": "^5.0.0",
+    "remark-wiki-link": "^2.0.1",
     "vue": "^3.4.0"
   },
   "devDependencies": {

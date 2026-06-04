@@ -28,6 +28,9 @@ import { editorViewCtx } from '@milkdown/kit/core';
 import { undo, redo } from '@milkdown/kit/prose/history';
 import { gfm } from '@milkdown/kit/preset/gfm';
 import { diagram } from '@milkdown/plugin-diagram';
+import { $remark } from '@milkdown/kit/utils';
+import remarkFrontmatter from 'remark-frontmatter';
+import remarkWikiLink from 'remark-wiki-link';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/frame-dark.css';
 
@@ -45,11 +48,18 @@ let crepe = null;
 let _replacing = false;
 let _editorReady = false;
 
+const frontmatterPlugin = $remark('remarkFrontmatter', () => remarkFrontmatter);
+const wikiLinkPlugin = $remark('remarkWikiLink', () => remarkWikiLink, {
+  aliasTag: 'name',
+  pageResolver: (name) => [name.replace(/ /g, '-').toLowerCase()],
+  hrefTemplate: (permalink) => `wikilink:${permalink}`
+});
+
 async function initCrepe(content) {
   if (!rootRef.value) return;
   _editorReady = false;
   crepe = new Crepe({ root: rootRef.value, defaultValue: content });
-  crepe.editor.use(gfm).use(diagram);
+  crepe.editor.use(gfm).use(diagram).use(frontmatterPlugin).use(wikiLinkPlugin);
   crepe.on((listener) => {
     listener.markdownUpdated(() => {
       if (!_replacing) {

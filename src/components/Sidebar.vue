@@ -12,9 +12,32 @@
             <line x1="9" y1="3" x2="9" y2="21"/>
           </svg>
         </button>
-        <span v-show="isOpen" class="folder-name">Fichiers ouverts</span>
+        <span v-show="isOpen" class="folder-name">{{ activeTab === 'files' ? 'Fichiers' : 'Recherche' }}</span>
       </div>
       <div v-show="isOpen" class="sidebar-actions">
+        <button
+          @click="activeTab = 'files'"
+          class="btn-icon"
+          :class="{ active: activeTab === 'files' }"
+          title="Fichiers"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+            <polyline points="13 2 13 9 20 9"/>
+          </svg>
+        </button>
+        <button
+          @click="activeTab = 'search'"
+          class="btn-icon"
+          :class="{ active: activeTab === 'search' }"
+          title="Rechercher"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </button>
+        <div class="toolbar-sep-v"></div>
         <button @click="$emit('open-folder')" class="btn-icon" title="Ouvrir un dossier">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
@@ -40,6 +63,7 @@
     </div>
 
     <div v-show="isOpen" class="sidebar-content">
+      <template v-if="activeTab === 'files'">
       <!-- Folder Tree Section -->
       <div v-if="fileTree" class="sidebar-section">
         <div class="section-header">
@@ -95,6 +119,17 @@
           </div>
         </div>
       </div>
+      </template>
+      <template v-else>
+        <SearchPanel
+          v-if="fileTree"
+          :folderPath="fileTree.path"
+          @select-file="$emit('select-file', $event)"
+        />
+        <div v-else class="empty-state">
+          Ouvrez un dossier pour effectuer une recherche globale.
+        </div>
+      </template>
     </div>
     
     <!-- Poignée de redimensionnement -->
@@ -105,6 +140,7 @@
 <script setup>
 import { ref } from 'vue';
 import FileTreeItem from './FileTreeItem.vue';
+import SearchPanel from './SearchPanel.vue';
 
 defineProps({
   files:       { type: Array,  default: () => [] },
@@ -117,6 +153,7 @@ defineEmits(['open-files', 'open-folder', 'select-file', 'new-file', 'close-file
 const sidebarWidth = ref(230);
 const isResizing = ref(false);
 const isOpen = ref(true);
+const activeTab = ref('files');
 
 const startResize = (e) => {
   isResizing.value = true;
@@ -279,6 +316,14 @@ const stopResize = () => {
 }
 .btn-icon svg { width: 15px; height: 15px; }
 .btn-icon:hover { background: #3b4252; color: #d8dee9; }
+.btn-icon.active { color: #88c0d0; }
+
+.toolbar-sep-v {
+  width: 1px;
+  height: 14px;
+  background: #3b4252;
+  margin: 0 4px;
+}
 
 .sidebar-files {
   flex: 1;

@@ -99,6 +99,12 @@
       </div>
     </div>
   </div>
+
+  <TemplateModal
+    :show="showTemplateModal"
+    @close="showTemplateModal = false"
+    @select="onTemplateSelect"
+  />
 </template>
 
 <script setup>
@@ -107,6 +113,7 @@ import Sidebar from './components/Sidebar.vue';
 import Editor from './components/Editor.vue';
 import EditorToolbar from './components/EditorToolbar.vue';
 import TableOfContents from './components/TableOfContents.vue';
+import TemplateModal from './components/TemplateModal.vue';
 
 const files        = ref([]);
 const currentFile  = ref(null);
@@ -115,6 +122,7 @@ const currentContent = ref('');
 const isDirty      = ref(false);
 const editorRef    = ref(null);
 const editorMode   = ref('wysiwyg');
+const showTemplateModal = ref(false);
 
 const currentFileName = ref(null);
 
@@ -251,8 +259,15 @@ async function saveFile() {
 }
 
 async function createNewFile() {
+  showTemplateModal.value = true;
+}
+
+async function onTemplateSelect(content) {
+  showTemplateModal.value = false;
   const filePath = await window.electronAPI.saveNewFile();
   if (!filePath) return;
+
+  await window.electronAPI.writeFile(filePath, content);
   addFiles([filePath]);
   await selectFile(filePath);
 }
@@ -274,8 +289,43 @@ function onKeydown(e) {
   }
 }
 
+async function handleWikiLink(link) {
+  if (!fileTree.value) return;
+  const permalink = link.replace('wikilink:', '');
+
+  // Search for the file in the tree
+  const findFile = (node, name) => {
+    if (node.type === 'file' && node.name.toLowerCase().replace(/\.md$/, '').replace(/ /g, '-') === name) {
+      return node.path;
+    }
+    if (node.children) {
+      for (const child of node.children) {
+        const found = findFile(child, name);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const filePath = findFile(fileTree.value, permalink);
+  if (filePath) {
+    await selectFile(filePath);
+  } else {
+    alert(`Fichier non trouvé : ${permalink}`);
+  }
+}
+
 onMounted(() => {
   document.addEventListener('keydown', onKeydown);
+
+  // Écouter les clics sur les liens wiki (via un événement global délégué car Milkdown est hors Vue)
+  document.addEventListener('click', async (e) => {
+    const anchor = e.target.closest('a');
+    if (anchor && anchor.getAttribute('href')?.startsWith('wikilink:')) {
+      e.preventDefault();
+      await handleWikiLink(anchor.getAttribute('href'));
+    }
+  });
   
   if (window.electronAPI.onFileChanged) {
     window.electronAPI.onFileChanged((_event, filePath, newContent) => {

@@ -21,4 +21,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   pathDirname: (p) => ipcRenderer.invoke('path:dirname', p),
   pathBasename: (p) => ipcRenderer.invoke('path:basename', p),
   exportPDF: (filePath) => ipcRenderer.invoke('export:pdf', filePath),
+  search: (folderPath, query) => ipcRenderer.invoke('fs:search', folderPath, query),
+  getTemplates: () => ipcRenderer.invoke('fs:get-templates'),
 });
