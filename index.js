@@ -192,6 +192,31 @@ ipcMain.handle('path:join', (_event, ...args) => path.join(...args));
 ipcMain.handle('path:dirname', (_event, p) => path.dirname(p));
 ipcMain.handle('path:basename', (_event, p) => path.basename(p));
 
+ipcMain.handle('export:pdf', async (event, filePath) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const pdfPath = filePath.replace(/\.md$/, '.pdf');
+
+  const result = await dialog.showSaveDialog(win, {
+    title: 'Exporter en PDF',
+    defaultPath: pdfPath,
+    filters: [{ name: 'PDF', extensions: ['pdf'] }]
+  });
+
+  if (result.canceled || !result.filePath) return { success: false };
+
+  try {
+    const data = await win.webContents.printToPDF({
+      printBackground: true,
+      marginsType: 1, // Default margins
+      pageSize: 'A4'
+    });
+    fs.writeFileSync(result.filePath, data);
+    return { success: true, path: result.filePath };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
 ipcMain.handle('dialog:save-new-file', async () => {
   const result = await dialog.showSaveDialog({
     filters: [{ name: 'Markdown', extensions: ['md'] }],

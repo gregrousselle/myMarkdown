@@ -20,4 +20,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   pathJoin: (...args) => ipcRenderer.invoke('path:join', ...args),
   pathDirname: (p) => ipcRenderer.invoke('path:dirname', p),
   pathBasename: (p) => ipcRenderer.invoke('path:basename', p),
+  exportPDF: (filePath) => ipcRenderer.invoke('export:pdf', filePath),
 });

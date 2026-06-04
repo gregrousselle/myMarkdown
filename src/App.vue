@@ -66,15 +66,19 @@
           @copy="editorRef?.triggerCopy()"
           @paste="editorRef?.triggerPaste()"
           @toggle-mode="editorRef?.toggleMode()"
+          @export-pdf="exportPDF"
         />
 
-        <Editor
-          v-if="currentFile"
-          ref="editorRef"
-          :content="currentContent"
-          @dirty="isDirty = true"
-          @mode-change="editorMode = $event"
-        />
+        <div v-if="currentFile" class="editor-with-toc">
+          <Editor
+            ref="editorRef"
+            :content="currentContent"
+            @dirty="isDirty = true"
+            @mode-change="editorMode = $event"
+            @content-update="currentContent = $event"
+          />
+          <TableOfContents :content="currentContent" />
+        </div>
         <div v-else class="welcome">
           <div class="welcome-inner">
             <svg class="welcome-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -102,6 +106,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import Sidebar from './components/Sidebar.vue';
 import Editor from './components/Editor.vue';
 import EditorToolbar from './components/EditorToolbar.vue';
+import TableOfContents from './components/TableOfContents.vue';
 
 const files        = ref([]);
 const currentFile  = ref(null);
@@ -252,6 +257,16 @@ async function createNewFile() {
   await selectFile(filePath);
 }
 
+async function exportPDF() {
+  if (!currentFile.value) return;
+  const result = await window.electronAPI.exportPDF(currentFile.value);
+  if (result.success) {
+    alert(`Exportation réussie : ${result.path}`);
+  } else if (result.error) {
+    alert(`Erreur d'exportation : ${result.error}`);
+  }
+}
+
 function onKeydown(e) {
   if ((e.metaKey || e.ctrlKey) && e.key === 's') {
     e.preventDefault();
@@ -352,6 +367,12 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
   display: flex;
   flex-direction: column;
   background: #2e3440;
+}
+
+.editor-with-toc {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
 }
 
 /* ---- Tabs ---- */
