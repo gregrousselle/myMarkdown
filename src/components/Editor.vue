@@ -63,9 +63,10 @@ watch(() => props.content, (newContent) => {
       isInternalUpdate = true;
       crepe.setMarkdown(newContent);
       // We need to wait for the next tick or use a timeout because setMarkdown might be async or trigger listeners
+      // Also, Crepe might be doing internal processing, so we keep isInternalUpdate for a bit.
       setTimeout(() => {
         isInternalUpdate = false;
-      }, 50);
+      }, 100);
     }
   }
 });
