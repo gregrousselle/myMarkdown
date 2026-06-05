@@ -1,6 +1,12 @@
 <template>
   <div class="editor-wrapper">
-    <div ref="rootRef" class="crepe-root"></div>
+    <div v-show="editorMode === 'wysiwyg'" ref="rootRef" class="crepe-root"></div>
+    <textarea
+      v-if="editorMode === 'source'"
+      class="source-editor"
+      :value="content"
+      @input="onSourceInput"
+    ></textarea>
   </div>
 </template>
 
@@ -17,9 +23,10 @@ import '@milkdown/crepe/theme/frame-dark.css';
 
 const props = defineProps({
   content: { type: String, default: '' },
+  editorMode: { type: String, default: 'wysiwyg' }
 });
 
-const emit = defineEmits(['dirty', 'content-update']);
+const emit = defineEmits(['dirty', 'content-update', 'mode-change']);
 
 const rootRef = ref(null);
 let crepe = null;
@@ -102,14 +109,15 @@ defineExpose({
     });
   },
   toggleMode: () => {
-    // Crepe doesn't have a simple "raw" toggle like Milkdown v6,
-    // but we can emit the mode change to let App.vue handle it if it wants,
-    // or we can implement a simple text-only mode.
-    // For now, let's just emit to satisfy the interface.
     const newMode = props.editorMode === 'wysiwyg' ? 'source' : 'wysiwyg';
     emit('mode-change', newMode);
   }
 });
+
+function onSourceInput(e) {
+  emit('content-update', e.target.value);
+  emit('dirty');
+}
 
 onMounted(init);
 onUnmounted(() => {
@@ -124,5 +132,18 @@ onUnmounted(() => {
 }
 .crepe-root {
   height: 100%;
+}
+.source-editor {
+  width: 100%;
+  height: 100%;
+  background: #2e3440;
+  color: #eceff4;
+  border: none;
+  padding: 2rem;
+  font-family: 'Fira Code', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  outline: none;
+  resize: none;
 }
 </style>

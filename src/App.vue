@@ -75,6 +75,7 @@
           <Editor
             ref="editorRef"
             :content="currentContent"
+            :editorMode="editorMode"
             @dirty="isDirty = true"
             @mode-change="editorMode = $event"
             @content-update="currentContent = $event"
