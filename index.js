@@ -126,19 +126,21 @@ ipcMain.handle('fs:write-file', async (_event, filePath, content) => {
   }
 });
 
-function searchInDir(dir, query, results = []) {
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
+async function searchInDir(dir, query, results = []) {
+  const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  const q = query.toLowerCase();
+
+  await Promise.all(entries.map(async (entry) => {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      searchInDir(fullPath, query, results);
+      await searchInDir(fullPath, query, results);
     } else if (entry.isFile() && entry.name.endsWith('.md')) {
-      const content = fs.readFileSync(fullPath, 'utf-8');
-      if (content.toLowerCase().includes(query.toLowerCase())) {
+      const content = await fs.promises.readFile(fullPath, 'utf-8');
+      if (content.toLowerCase().includes(q)) {
         const lines = content.split('\n');
         const matches = lines
           .map((line, index) => ({ line, index }))
-          .filter(({ line }) => line.toLowerCase().includes(query.toLowerCase()))
+          .filter(({ line }) => line.toLowerCase().includes(q))
           .slice(0, 3); // Limit to 3 matches per file
 
         results.push({
@@ -148,14 +150,14 @@ function searchInDir(dir, query, results = []) {
         });
       }
     }
-  }
+  }));
   return results;
 }
 
 ipcMain.handle('fs:search', async (_event, folderPath, query) => {
   if (!query || query.length < 2) return [];
   try {
-    return searchInDir(folderPath, query);
+    return await searchInDir(folderPath, query);
   } catch (err) {
     console.error('Search error:', err);
     return [];

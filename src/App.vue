@@ -60,6 +60,8 @@
           v-if="currentFile"
           :isDirty="isDirty"
           :editorMode="editorMode"
+          :showAIPanel="showAIPanel"
+          @toggle-ai="showAIPanel = !showAIPanel"
           @save="saveFile"
           @undo="editorRef?.triggerUndo()"
           @redo="editorRef?.triggerRedo()"
@@ -77,7 +79,12 @@
             @mode-change="editorMode = $event"
             @content-update="currentContent = $event"
           />
-          <TableOfContents :content="currentContent" />
+          <AIPanel
+            v-if="showAIPanel"
+            :content="currentContent"
+            @open-settings="showAISettingsModal = true"
+          />
+          <TableOfContents v-else :content="currentContent" />
         </div>
         <div v-else class="welcome">
           <div class="welcome-inner">
@@ -105,6 +112,10 @@
     @close="showTemplateModal = false"
     @select="onTemplateSelect"
   />
+  <AISettingsModal
+    :show="showAISettingsModal"
+    @close="showAISettingsModal = false"
+  />
 </template>
 
 <script setup>
@@ -114,6 +125,8 @@ import Editor from './components/Editor.vue';
 import EditorToolbar from './components/EditorToolbar.vue';
 import TableOfContents from './components/TableOfContents.vue';
 import TemplateModal from './components/TemplateModal.vue';
+import AIPanel from './components/AIPanel.vue';
+import AISettingsModal from './components/AISettingsModal.vue';
 
 const files        = ref([]);
 const currentFile  = ref(null);
@@ -123,6 +136,8 @@ const isDirty      = ref(false);
 const editorRef    = ref(null);
 const editorMode   = ref('wysiwyg');
 const showTemplateModal = ref(false);
+const showAISettingsModal = ref(false);
+const showAIPanel = ref(false);
 
 const currentFileName = ref(null);
 
@@ -244,10 +259,10 @@ async function selectFile(filePath) {
     }
   }
 
-  currentFile.value = filePath;
-  await updateCurrentFileName();
   const content = await window.electronAPI.readFile(filePath);
   currentContent.value = content;
+  currentFile.value = filePath;
+  await updateCurrentFileName();
   isDirty.value = false;
 }
 
