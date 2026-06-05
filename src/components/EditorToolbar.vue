@@ -58,6 +58,12 @@
         </template>
       </button>
       <div class="toolbar-sep"></div>
+      <button @mousedown.prevent @click="$emit('toggle-ai')" class="toolbar-btn" :class="{ 'btn-active': showAIPanel }" title="Assistant IA">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+      </button>
+      <div class="toolbar-sep"></div>
       <button @mousedown.prevent @click="$emit('export-pdf')" class="toolbar-btn" title="Exporter en PDF">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -80,10 +86,14 @@ defineProps({
   editorMode: {
     type: String,
     default: 'wysiwyg'
+  },
+  showAIPanel: {
+    type: Boolean,
+    default: false
   }
 });
 
-defineEmits(['save', 'undo', 'redo', 'copy', 'paste', 'toggle-mode', 'export-pdf']);
+defineEmits(['save', 'undo', 'redo', 'copy', 'paste', 'toggle-mode', 'export-pdf', 'toggle-ai']);
 </script>
 
 <style scoped>
