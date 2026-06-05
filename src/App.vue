@@ -71,7 +71,7 @@
           @export-pdf="exportPDF"
         />
 
-        <div v-if="currentFile" class="editor-with-toc">
+        <div v-if="currentFile" :key="currentFile" class="editor-with-toc">
           <Editor
             ref="editorRef"
             :content="currentContent"
@@ -243,6 +243,8 @@ function closeFolder() {
 }
 
 async function selectFile(filePath) {
+  if (currentFile.value === filePath) return;
+
   if (isDirty.value) {
     await saveFile();
   }
