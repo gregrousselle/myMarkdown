@@ -45,11 +45,20 @@ watch(() => props.content, (newContent) => {
 }, { immediate: true });
 
 function scrollTo(id) {
-  // En mode Crepe, les titres ont des ID générés ou on peut chercher le texte
-  const elements = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
-  for (const el of elements) {
-    if (el.textContent.toLowerCase().replace(/[^\w]+/g, '-') === id) {
-      el.scrollIntoView({ behavior: 'smooth' });
+  // Find the heading in the document
+  const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+  for (const heading of headings) {
+    // Check if the heading text matches the ID
+    const headingId = heading.textContent.toLowerCase().replace(/[^\w]+/g, '-');
+    if (headingId === id) {
+      // Find the scrollable container. Crepe uses an internal div for scrolling.
+      const scrollContainer = heading.closest('.milkdown');
+      if (scrollContainer) {
+        // We use scrollIntoView on the heading itself
+        heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
       break;
     }
   }
