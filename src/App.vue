@@ -362,7 +362,8 @@ onMounted(async () => {
   const savedSession = localStorage.getItem('markdown_session');
   if (savedSession) {
     try {
-      const { folderPath, openFiles, currentFile: lastFile, editorMode: lastMode } = JSON.parse(savedSession);
+      const parsedSession = JSON.parse(savedSession);
+      const { folderPath, openFiles, currentFile: lastFile, editorMode: lastMode, showAIPanel: lastAI } = parsedSession;
 
       if (folderPath) {
         await loadFolder(folderPath);
@@ -380,9 +381,8 @@ onMounted(async () => {
         editorMode.value = lastMode;
       }
 
-      const parsedSession = JSON.parse(savedSession);
-      if (parsedSession.showAIPanel !== undefined) {
-        showAIPanel.value = parsedSession.showAIPanel;
+      if (lastAI !== undefined) {
+        showAIPanel.value = lastAI;
       }
     } catch (e) {
       console.error('Failed to restore session', e);
