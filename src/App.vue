@@ -61,7 +61,7 @@
           :isDirty="isDirty"
           :editorMode="editorMode"
           :showAIPanel="showAIPanel"
-          @toggle-ai="showAIPanel = !showAIPanel"
+          @toggle-ai="showAIPanel = !showAIPanel; saveSession()"
           @save="saveFile"
           @undo="editorRef?.triggerUndo()"
           @redo="editorRef?.triggerRedo()"
@@ -77,7 +77,7 @@
             :content="currentContent"
             :editorMode="editorMode"
             @dirty="isDirty = true"
-            @mode-change="editorMode = $event"
+            @mode-change="editorMode = $event; saveSession()"
             @content-update="currentContent = $event"
           />
           <AIPanel
@@ -142,6 +142,17 @@ const showAIPanel = ref(false);
 
 const currentFileName = ref(null);
 
+function saveSession() {
+  const session = {
+    folderPath: fileTree.value ? fileTree.value.path : null,
+    openFiles: files.value.map(f => f.path),
+    currentFile: currentFile.value,
+    editorMode: editorMode.value,
+    showAIPanel: showAIPanel.value
+  };
+  localStorage.setItem('markdown_session', JSON.stringify(session));
+}
+
 async function updateCurrentFileName() {
   if (!currentFile.value) {
     currentFileName.value = null;
@@ -165,6 +176,8 @@ async function addFiles(filePaths) {
     }
   });
 
+  saveSession();
+
   if (filePaths.length > 0 && !currentFile.value) {
     selectFile(filePaths[0]);
   }
@@ -177,8 +190,7 @@ async function openFiles() {
   await selectFile(selectedFiles[0]);
 }
 
-async function openFolder() {
-  const folderPath = await window.electronAPI.openFolder();
+async function loadFolder(folderPath) {
   if (!folderPath) return;
 
   // Si un dossier était déjà ouvert, on arrête de le surveiller
@@ -189,6 +201,13 @@ async function openFolder() {
   const tree = await window.electronAPI.getTree(folderPath);
   fileTree.value = tree;
   window.electronAPI.watchFolder(folderPath);
+  saveSession();
+}
+
+async function openFolder() {
+  const folderPath = await window.electronAPI.openFolder();
+  if (!folderPath) return;
+  await loadFolder(folderPath);
 }
 
 async function refreshTree() {
@@ -234,12 +253,14 @@ async function closeFile(path) {
       isDirty.value = false;
     }
   }
+  saveSession();
 }
 
 function closeFolder() {
   if (fileTree.value) {
     window.electronAPI.unwatchFolder(fileTree.value.path);
     fileTree.value = null;
+    saveSession();
   }
 }
 
@@ -267,6 +288,7 @@ async function selectFile(filePath) {
   currentFile.value = filePath;
   await updateCurrentFileName();
   isDirty.value = false;
+  saveSession();
 }
 
 async function saveFile() {
@@ -333,8 +355,39 @@ async function handleWikiLink(link) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   document.addEventListener('keydown', onKeydown);
+
+  // Restore session
+  const savedSession = localStorage.getItem('markdown_session');
+  if (savedSession) {
+    try {
+      const { folderPath, openFiles, currentFile: lastFile, editorMode: lastMode } = JSON.parse(savedSession);
+
+      if (folderPath) {
+        await loadFolder(folderPath);
+      }
+
+      if (openFiles && openFiles.length > 0) {
+        await addFiles(openFiles);
+      }
+
+      if (lastFile) {
+        await selectFile(lastFile);
+      }
+
+      if (lastMode) {
+        editorMode.value = lastMode;
+      }
+
+      const parsedSession = JSON.parse(savedSession);
+      if (parsedSession.showAIPanel !== undefined) {
+        showAIPanel.value = parsedSession.showAIPanel;
+      }
+    } catch (e) {
+      console.error('Failed to restore session', e);
+    }
+  }
 
   // Écouter les clics sur les liens wiki (via un événement global délégué car Milkdown est hors Vue)
   document.addEventListener('click', async (e) => {
