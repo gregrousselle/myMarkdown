@@ -84,41 +84,6 @@
         </div>
       </div>
 
-      <!-- Opened Files Section -->
-      <div class="sidebar-section">
-        <div class="section-header">
-          <span class="section-title">Fichiers ouverts</span>
-        </div>
-        <div class="sidebar-files">
-          <p v-if="files.length === 0" class="empty-state">
-            Aucun fichier ouvert
-          </p>
-          <div
-            v-for="file in files"
-            :key="file.path"
-            @click="$emit('select-file', file.path)"
-            class="file-item"
-            :class="{ active: currentFile === file.path }"
-            :title="file.name"
-          >
-            <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-            </svg>
-            <span class="file-name">{{ file.name }}</span>
-            <button
-              @click.stop="$emit('close-file', file.path)"
-              class="file-close-btn"
-              title="Fermer le fichier"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
       </template>
       <template v-else>
         <SearchPanel

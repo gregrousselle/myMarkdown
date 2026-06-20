@@ -8,7 +8,7 @@
         'is-dragging': isDragging,
         'drag-over': isDragOver
       }"
-      :style="{ paddingLeft: depth * 12 + 'px' }"
+      :style="{ paddingLeft: (depth * 20 + 12) + 'px' }"
       draggable="true"
       @dragstart.stop="onDragStart"
       @dragend.stop="onDragEnd"
@@ -187,17 +187,45 @@ async function onDrop(e) {
 <style scoped>
 .tree-item {
   user-select: none;
+  position: relative;
+}
+
+.tree-children {
+  position: relative;
+}
+
+.tree-children::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: v-bind('depth * 20 + 18 + "px"');
+  bottom: 12px;
+  width: 1px;
+  border-left: 1px dashed #4c566a;
+  pointer-events: none;
+}
+
+.tree-row::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: v-bind('(depth > 0 ? (depth - 1) * 20 + 18 : -100) + "px"');
+  width: 10px;
+  height: 1px;
+  border-top: 1px dashed #4c566a;
+  pointer-events: none;
 }
 
 .tree-row {
   display: flex;
   align-items: center;
-  padding: 4px 8px;
+  padding: 4px 12px;
   cursor: pointer;
   color: #8490a8;
   font-size: 13px;
   transition: background 0.12s, color 0.12s;
-  gap: 6px;
+  gap: 8px;
+  position: relative;
 }
 
 .tree-row:hover {
