@@ -1,6 +1,20 @@
 <template>
   <div class="editor-wrapper">
-    <div v-show="editorMode === 'wysiwyg'" ref="rootRef" class="crepe-root"></div>
+    <div v-if="hasError && editorMode === 'wysiwyg'" class="editor-error-container">
+      <div class="error-box">
+        <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <h3>Impossible d'afficher la vue formatée</h3>
+        <p class="error-msg">{{ errorMessage || 'Une erreur inconnue est survenue lors de l\'initialisation de l\'éditeur.' }}</p>
+        <p class="error-hint">Le fichier contient peut-être du Markdown complexe ou non géré par Milkdown. Vous pouvez basculer en mode source (texte brut) pour le consulter et le corriger.</p>
+        <button class="btn-fallback" @click="fallbackToSource">Basculer en mode source (texte brut)</button>
+      </div>
+    </div>
+
+    <div v-show="editorMode === 'wysiwyg' && !hasError" ref="rootRef" class="crepe-root"></div>
     <textarea
       v-if="editorMode === 'source'"
       class="source-editor"
@@ -31,9 +45,22 @@ const emit = defineEmits(['dirty', 'content-update', 'mode-change']);
 const rootRef = ref(null);
 let crepe = null;
 let isInternalUpdate = false;
+const isReady = ref(false);
+let pendingContent = null;
+const hasError = ref(false);
+const errorMessage = ref('');
+
+function fallbackToSource() {
+  emit('mode-change', 'source');
+}
+
+const normalize = (str) => (str || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
 
 async function init() {
   if (!rootRef.value) return;
+  isReady.value = false;
+  pendingContent = null;
+
   crepe = new Crepe({
     root: rootRef.value,
     defaultValue: props.content,
@@ -43,7 +70,7 @@ async function init() {
   crepe.editor
     .config((ctx) => {
       ctx.get(listenerCtx).markdownUpdated((ctx, markdown, prevMarkdown) => {
-        if (markdown !== prevMarkdown && !isInternalUpdate) {
+        if (markdown !== prevMarkdown && !isInternalUpdate && isReady.value) {
           emit('content-update', markdown);
           emit('dirty');
         }
@@ -60,51 +87,108 @@ async function init() {
     })
     .use(listener);
 
-  await crepe.create();
+  try {
+    await crepe.create();
+    isReady.value = true;
+    hasError.value = false;
+    errorMessage.value = '';
+
+    if (pendingContent !== null) {
+      if (normalize(pendingContent) !== normalize(crepe.getMarkdown())) {
+        isInternalUpdate = true;
+        crepe.setMarkdown(pendingContent);
+        setTimeout(() => {
+          isInternalUpdate = false;
+        }, 100);
+      }
+      pendingContent = null;
+    }
+  } catch (err) {
+    console.error('Failed to create Crepe editor:', err);
+    hasError.value = true;
+    errorMessage.value = err.message || String(err);
+  }
 }
 
 watch(() => props.content, (newContent) => {
+  if (!isReady.value) {
+    pendingContent = newContent;
+    return;
+  }
+
   if (crepe && !isInternalUpdate) {
-    const currentMarkdown = crepe.getMarkdown();
-    if (newContent !== currentMarkdown) {
-      isInternalUpdate = true;
-      crepe.setMarkdown(newContent);
-      // We need to wait for the next tick or use a timeout because setMarkdown might be async or trigger listeners
-      // Also, Crepe might be doing internal processing, so we keep isInternalUpdate for a bit.
-      setTimeout(() => {
-        isInternalUpdate = false;
-      }, 100);
+    try {
+      const currentMarkdown = crepe.getMarkdown();
+      if (normalize(newContent) !== normalize(currentMarkdown)) {
+        isInternalUpdate = true;
+        crepe.setMarkdown(newContent);
+        // We need to wait for the next tick or use a timeout because setMarkdown might be async or trigger listeners
+        // Also, Crepe might be doing internal processing, so we keep isInternalUpdate for a bit.
+        setTimeout(() => {
+          isInternalUpdate = false;
+        }, 100);
+      }
+      // Reset error state on successful update
+      hasError.value = false;
+      errorMessage.value = '';
+    } catch (err) {
+      console.error('Error updating Crepe markdown:', err);
+      hasError.value = true;
+      errorMessage.value = err.message || String(err);
     }
   }
 });
 
 defineExpose({
-  getContent: () => crepe?.getMarkdown() ?? props.content,
+  getContent: () => {
+    if (!isReady.value || !crepe) return props.content;
+    try {
+      return crepe.getMarkdown();
+    } catch (err) {
+      console.error('Error getting Crepe markdown:', err);
+      return props.content;
+    }
+  },
   triggerUndo: () => {
-    crepe.editor.action((ctx) => {
-      const view = ctx.get(editorViewCtx);
-      const { state, dispatch } = view;
-      undo(state, dispatch);
-    });
+    if (!isReady.value || !crepe) return;
+    try {
+      crepe.editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx);
+        const { state, dispatch } = view;
+        undo(state, dispatch);
+      });
+    } catch (err) {
+      console.error('Error triggering undo:', err);
+    }
   },
   triggerRedo: () => {
-    crepe.editor.action((ctx) => {
-      const view = ctx.get(editorViewCtx);
-      const { state, dispatch } = view;
-      redo(state, dispatch);
-    });
+    if (!isReady.value || !crepe) return;
+    try {
+      crepe.editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx);
+        const { state, dispatch } = view;
+        redo(state, dispatch);
+      });
+    } catch (err) {
+      console.error('Error triggering redo:', err);
+    }
   },
   triggerCopy: () => {
     document.execCommand('copy');
   },
   triggerPaste: () => {
+    if (!isReady.value || !crepe) return;
     navigator.clipboard.readText().then(text => {
-      if (crepe) {
-        crepe.editor.action((ctx) => {
-          const view = ctx.get(editorViewCtx);
-          const { state, dispatch } = view;
-          dispatch(state.tr.insertText(text));
-        });
+      if (crepe && isReady.value) {
+        try {
+          crepe.editor.action((ctx) => {
+            const view = ctx.get(editorViewCtx);
+            const { state, dispatch } = view;
+            dispatch(state.tr.insertText(text));
+          });
+        } catch (err) {
+          console.error('Error triggering paste:', err);
+        }
       }
     });
   },
@@ -121,17 +205,32 @@ function onSourceInput(e) {
 
 onMounted(init);
 onUnmounted(() => {
-    if (crepe) crepe.destroy();
+  isReady.value = false;
+  pendingContent = null;
+  if (crepe) {
+    try {
+      crepe.destroy();
+    } catch (err) {
+      console.error('Error destroying Crepe editor:', err);
+    }
+    crepe = null;
+  }
 });
 </script>
 
 <style scoped>
 .editor-wrapper {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   background: #2e3440;
+  overflow: hidden;
+  height: 100%;
 }
 .crepe-root {
-  height: 100%;
+  flex: 1;
+  overflow-y: auto;
+  width: 100%;
 }
 .source-editor {
   width: 100%;
@@ -145,5 +244,97 @@ onUnmounted(() => {
   line-height: 1.6;
   outline: none;
   resize: none;
+}
+.editor-error-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  background: #2e3440;
+  padding: 2rem;
+  color: #eceff4;
+}
+.error-box {
+  max-width: 500px;
+  background: #3b4252;
+  border-radius: 8px;
+  padding: 2.5rem 2rem;
+  text-align: center;
+  border: 1px solid #bf616a;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+.error-icon {
+  width: 48px;
+  height: 48px;
+  color: #bf616a;
+  margin-bottom: 1rem;
+}
+.error-box h3 {
+  font-size: 18px;
+  margin-bottom: 0.5rem;
+  color: #eceff4;
+}
+.error-msg {
+  font-family: 'Fira Code', monospace;
+  background: #2e3440;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #d8dee9;
+  margin: 1.25rem 0;
+  text-align: left;
+  word-break: break-word;
+  max-height: 150px;
+  overflow-y: auto;
+  border-left: 3px solid #bf616a;
+}
+.error-hint {
+  font-size: 13px;
+  color: #a3be8c;
+  line-height: 1.5;
+  margin-bottom: 1.5rem;
+}
+.btn-fallback {
+  background: #bf616a;
+  color: #eceff4;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+.btn-fallback:hover {
+  background: #d08770;
+}
+</style>
+
+<style>
+/* Global Milkdown Crepe overrides to match Nord dark theme */
+.crepe-root .milkdown {
+  background: #2e3440 !important;
+  color: #eceff4 !important;
+  --crepe-color-background: #2e3440 !important;
+  --crepe-color-on-background: #eceff4 !important;
+  --crepe-color-selected: #4c566a !important;
+  --crepe-font-default: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  --crepe-font-title: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+.crepe-root .milkdown-root,
+.crepe-root .editor {
+  background: transparent !important;
+}
+
+/* Ensure the ProseMirror editor fills the container and is readable */
+.crepe-root .milkdown .ProseMirror {
+  min-height: 100%;
+  outline: none;
+  padding: 2rem;
+  color: #eceff4 !important;
+  font-size: 15px;
+  line-height: 1.6;
 }
 </style>
