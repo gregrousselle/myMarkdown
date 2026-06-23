@@ -76,9 +76,11 @@
             ref="editorRef"
             :content="currentContent"
             :editorMode="editorMode"
+            :scrollPos="currentScrollPos"
             @dirty="isDirty = true"
             @mode-change="editorMode = $event; saveSession()"
             @content-update="currentContent = $event"
+            @scroll="onEditorScroll"
           />
           <AIPanel
             v-if="showAIPanel"
@@ -142,10 +144,29 @@ const showAIPanel = ref(false);
 
 const currentFileName = ref(null);
 
+const currentScrollPos = computed(() => {
+  const f = files.value.find(f => f.path === currentFile.value);
+  return f ? (f.scrollPos || 0) : 0;
+});
+
+let saveSessionTimeout;
+function onEditorScroll(pos) {
+  const f = files.value.find(f => f.path === currentFile.value);
+  if (f && f.scrollPos !== pos) {
+    f.scrollPos = pos;
+
+    // Debounce session saving on scroll
+    clearTimeout(saveSessionTimeout);
+    saveSessionTimeout = setTimeout(() => {
+      saveSession();
+    }, 500);
+  }
+}
+
 function saveSession() {
   const session = {
     folderPath: fileTree.value ? fileTree.value.path : null,
-    openFiles: files.value.map(f => f.path),
+    openFiles: files.value.map(f => ({ path: f.path, scrollPos: f.scrollPos || 0 })),
     currentFile: currentFile.value,
     editorMode: editorMode.value,
     showAIPanel: showAIPanel.value
@@ -162,9 +183,16 @@ async function updateCurrentFileName() {
 }
 
 async function addFiles(filePaths) {
-  const newFiles = await Promise.all(filePaths.map(async (filePath) => {
-    const name = await window.electronAPI.pathBasename(filePath);
-    return { path: filePath, name };
+  // Support both array of strings and array of objects {path, scrollPos}
+  const normalizedFilePaths = filePaths.map(f => typeof f === 'string' ? { path: f } : f);
+
+  const newFiles = await Promise.all(normalizedFilePaths.map(async (fileObj) => {
+    const name = await window.electronAPI.pathBasename(fileObj.path);
+    return {
+      path: fileObj.path,
+      name,
+      scrollPos: fileObj.scrollPos || 0
+    };
   }));
 
   newFiles.forEach(newFile => {
@@ -179,7 +207,8 @@ async function addFiles(filePaths) {
   saveSession();
 
   if (filePaths.length > 0 && !currentFile.value) {
-    selectFile(filePaths[0]);
+    const firstPath = typeof filePaths[0] === 'string' ? filePaths[0] : filePaths[0].path;
+    selectFile(firstPath);
   }
 }
 
@@ -276,7 +305,8 @@ async function selectFile(filePath) {
     const name = await window.electronAPI.pathBasename(filePath);
     files.value.push({
       path: filePath,
-      name: name
+      name: name,
+      scrollPos: 0
     });
     if (window.electronAPI.watchFile) {
       window.electronAPI.watchFile(filePath);

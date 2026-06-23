@@ -14,12 +14,14 @@
       </div>
     </div>
 
-    <div v-show="editorMode === 'wysiwyg' && !hasError" ref="rootRef" class="crepe-root"></div>
+    <div v-show="editorMode === 'wysiwyg' && !hasError" ref="rootRef" class="crepe-root" @scroll="onWysiwygScroll"></div>
     <textarea
       v-if="editorMode === 'source'"
+      ref="sourceRef"
       class="source-editor"
       :value="content"
       @input="onSourceInput"
+      @scroll="onSourceScroll"
     ></textarea>
   </div>
 </template>
@@ -37,12 +39,14 @@ import '@milkdown/crepe/theme/frame-dark.css';
 
 const props = defineProps({
   content: { type: String, default: '' },
-  editorMode: { type: String, default: 'wysiwyg' }
+  editorMode: { type: String, default: 'wysiwyg' },
+  scrollPos: { type: Number, default: 0 }
 });
 
-const emit = defineEmits(['dirty', 'content-update', 'mode-change']);
+const emit = defineEmits(['dirty', 'content-update', 'mode-change', 'scroll']);
 
 const rootRef = ref(null);
+const sourceRef = ref(null);
 let crepe = null;
 let isInternalUpdate = false;
 const isReady = ref(false);
@@ -65,6 +69,14 @@ async function init() {
     root: rootRef.value,
     defaultValue: props.content,
   });
+
+  const restoreScroll = () => {
+    if (props.editorMode === 'wysiwyg' && rootRef.value) {
+      rootRef.value.scrollTop = props.scrollPos;
+    } else if (props.editorMode === 'source' && sourceRef.value) {
+      sourceRef.value.scrollTop = props.scrollPos;
+    }
+  };
 
   // Adding remark plugins
   crepe.editor
@@ -92,6 +104,9 @@ async function init() {
     isReady.value = true;
     hasError.value = false;
     errorMessage.value = '';
+
+    // Initial scroll restoration
+    setTimeout(restoreScroll, 50);
 
     if (pendingContent !== null) {
       if (normalize(pendingContent) !== normalize(crepe.getMarkdown())) {
@@ -202,6 +217,24 @@ function onSourceInput(e) {
   emit('content-update', e.target.value);
   emit('dirty');
 }
+
+function onWysiwygScroll(e) {
+  emit('scroll', e.target.scrollTop);
+}
+
+function onSourceScroll(e) {
+  emit('scroll', e.target.scrollTop);
+}
+
+watch(() => props.editorMode, () => {
+  setTimeout(() => {
+    if (props.editorMode === 'wysiwyg' && rootRef.value) {
+      rootRef.value.scrollTop = props.scrollPos;
+    } else if (props.editorMode === 'source' && sourceRef.value) {
+      sourceRef.value.scrollTop = props.scrollPos;
+    }
+  }, 50);
+});
 
 onMounted(init);
 onUnmounted(() => {
