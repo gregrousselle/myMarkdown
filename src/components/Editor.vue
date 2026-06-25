@@ -31,6 +31,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { Crepe } from '@milkdown/crepe';
 import { listener, listenerCtx } from '@milkdown/plugin-listener';
 import { remarkPluginsCtx, editorViewCtx } from '@milkdown/core';
+import { replaceAll } from '@milkdown/utils';
 import { undo, redo } from '@milkdown/prose/history';
 import remarkFrontmatter from 'remark-frontmatter';
 import remarkWikiLink from 'remark-wiki-link';
@@ -111,7 +112,7 @@ async function init() {
     if (pendingContent !== null) {
       if (normalize(pendingContent) !== normalize(crepe.getMarkdown())) {
         isInternalUpdate = true;
-        crepe.setMarkdown(pendingContent);
+        crepe.editor.action(replaceAll(pendingContent));
         setTimeout(() => {
           isInternalUpdate = false;
         }, 100);
@@ -136,7 +137,7 @@ watch(() => props.content, (newContent) => {
       const currentMarkdown = crepe.getMarkdown();
       if (normalize(newContent) !== normalize(currentMarkdown)) {
         isInternalUpdate = true;
-        crepe.setMarkdown(newContent);
+        crepe.editor.action(replaceAll(newContent));
         // We need to wait for the next tick or use a timeout because setMarkdown might be async or trigger listeners
         // Also, Crepe might be doing internal processing, so we keep isInternalUpdate for a bit.
         setTimeout(() => {
