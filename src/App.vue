@@ -28,12 +28,20 @@
         <!-- Tabs -->
         <div v-show="files.length > 0" class="tabs-bar">
           <div
-            v-for="file in files"
+            v-for="(file, index) in files"
             :key="file.path"
             class="tab"
-            :class="{ active: currentFile === file.path }"
+            :class="{
+              active: currentFile === file.path,
+              'drag-over': dragOverTabIndex === index
+            }"
             @click="selectFile(file.path)"
             :title="file.path"
+            draggable="true"
+            @dragstart="onTabDragStart($event, index)"
+            @dragover.prevent="onTabDragOver($event, index)"
+            @dragleave="onTabDragLeave"
+            @drop="onTabDrop($event, index)"
           >
             <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -62,26 +70,29 @@
           :editorMode="editorMode"
           :showAIPanel="showAIPanel"
           @toggle-ai="showAIPanel = !showAIPanel; saveSession()"
-          @save="saveFile"
-          @undo="editorRef?.triggerUndo()"
-          @redo="editorRef?.triggerRedo()"
-          @copy="editorRef?.triggerCopy()"
-          @paste="editorRef?.triggerPaste()"
-          @toggle-mode="editorRef?.toggleMode()"
+          @save="saveFile()"
+          @undo="editorRefs[currentFile]?.triggerUndo()"
+          @redo="editorRefs[currentFile]?.triggerRedo()"
+          @copy="editorRefs[currentFile]?.triggerCopy()"
+          @paste="editorRefs[currentFile]?.triggerPaste()"
+          @toggle-mode="editorRefs[currentFile]?.toggleMode()"
           @export-pdf="exportPDF"
         />
 
-        <div v-if="currentFile" :key="currentFile" class="editor-with-toc">
-          <Editor
-            ref="editorRef"
-            :content="currentContent"
-            :editorMode="editorMode"
-            :scrollPos="currentScrollPos"
-            @dirty="isDirty = true"
-            @mode-change="editorMode = $event; saveSession()"
-            @content-update="currentContent = $event"
-            @scroll="onEditorScroll"
-          />
+        <div v-if="currentFile" class="editor-with-toc">
+          <template v-for="file in files" :key="file.path">
+            <Editor
+              v-show="currentFile === file.path"
+              :ref="el => { if (el) editorRefs[file.path] = el }"
+              :content="file.content || ''"
+              :editorMode="editorMode"
+              :scrollPos="file.scrollPos || 0"
+              @dirty="file.isDirty = true"
+              @mode-change="editorMode = $event; saveSession()"
+              @content-update="onFileContentUpdate(file.path, $event)"
+              @scroll="onFileScroll(file.path, $event)"
+            />
+          </template>
           <AIPanel
             v-if="showAIPanel"
             :content="currentContent"
@@ -134,24 +145,28 @@ import AISettingsModal from './components/AISettingsModal.vue';
 const files        = ref([]);
 const currentFile  = ref(null);
 const fileTree     = ref(null);
-const currentContent = ref('');
-const isDirty      = ref(false);
-const editorRef    = ref(null);
+const currentContent = computed(() => {
+  const f = files.value.find(f => f.path === currentFile.value);
+  return f ? (f.content || '') : '';
+});
+const isDirty      = computed(() => {
+  const f = files.value.find(f => f.path === currentFile.value);
+  return f ? !!f.isDirty : false;
+});
+const editorRefs   = ref({});
 const editorMode   = ref('wysiwyg');
 const showTemplateModal = ref(false);
 const showAISettingsModal = ref(false);
 const showAIPanel = ref(false);
 
+const dragTabIndex = ref(null);
+const dragOverTabIndex = ref(null);
+
 const currentFileName = ref(null);
 
-const currentScrollPos = computed(() => {
-  const f = files.value.find(f => f.path === currentFile.value);
-  return f ? (f.scrollPos || 0) : 0;
-});
-
 let saveSessionTimeout;
-function onEditorScroll(pos) {
-  const f = files.value.find(f => f.path === currentFile.value);
+function onFileScroll(path, pos) {
+  const f = files.value.find(f => f.path === path);
   if (f && f.scrollPos !== pos) {
     f.scrollPos = pos;
 
@@ -160,6 +175,13 @@ function onEditorScroll(pos) {
     saveSessionTimeout = setTimeout(() => {
       saveSession();
     }, 500);
+  }
+}
+
+function onFileContentUpdate(path, content) {
+  const f = files.value.find(f => f.path === path);
+  if (f) {
+    f.content = content;
   }
 }
 
@@ -260,13 +282,15 @@ function onDrop(e) {
 }
 
 async function closeFile(path) {
-  if (currentFile.value === path && isDirty.value) {
-    await saveFile();
+  const f = files.value.find(file => file.path === path);
+  if (f && f.isDirty) {
+    await saveFile(path);
   }
   
   const idx = files.value.findIndex(f => f.path === path);
   if (idx !== -1) {
     files.value.splice(idx, 1);
+    delete editorRefs.value[path];
     if (window.electronAPI.unwatchFile) {
       window.electronAPI.unwatchFile(path);
     }
@@ -296,36 +320,43 @@ function closeFolder() {
 async function selectFile(filePath) {
   if (currentFile.value === filePath) return;
 
-  if (isDirty.value) {
-    await saveFile();
-  }
-
   // S'assurer que le fichier est ouvert dans un onglet
-  if (!files.value.find(f => f.path === filePath)) {
+  let file = files.value.find(f => f.path === filePath);
+  if (!file) {
     const name = await window.electronAPI.pathBasename(filePath);
-    files.value.push({
+    file = {
       path: filePath,
       name: name,
-      scrollPos: 0
-    });
+      scrollPos: 0,
+      content: undefined,
+      isDirty: false
+    };
+    files.value.push(file);
     if (window.electronAPI.watchFile) {
       window.electronAPI.watchFile(filePath);
     }
   }
 
-  const content = await window.electronAPI.readFile(filePath);
-  currentContent.value = content;
+  if (file.content === undefined) {
+    const content = await window.electronAPI.readFile(filePath);
+    file.content = content;
+  }
+
   currentFile.value = filePath;
   await updateCurrentFileName();
-  isDirty.value = false;
   saveSession();
 }
 
-async function saveFile() {
-  if (!currentFile.value) return;
-  const content = editorRef.value?.getContent() ?? currentContent.value;
-  await window.electronAPI.writeFile(currentFile.value, content);
-  isDirty.value = false;
+async function saveFile(filePath) {
+  const targetPath = filePath || currentFile.value;
+  if (!targetPath) return;
+
+  const f = files.value.find(f => f.path === targetPath);
+  if (!f) return;
+
+  const content = editorRefs.value[targetPath]?.getContent() ?? f.content;
+  await window.electronAPI.writeFile(targetPath, content);
+  f.isDirty = false;
 }
 
 async function createNewFile() {
@@ -357,6 +388,33 @@ function onKeydown(e) {
     e.preventDefault();
     saveFile();
   }
+}
+
+// --- Tab Drag & Drop ---
+
+function onTabDragStart(e, index) {
+  dragTabIndex.value = index;
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function onTabDragOver(e, index) {
+  if (dragTabIndex.value !== index) {
+    dragOverTabIndex.value = index;
+  }
+}
+
+function onTabDragLeave() {
+  dragOverTabIndex.value = null;
+}
+
+function onTabDrop(e, index) {
+  if (dragTabIndex.value !== null && dragTabIndex.value !== index) {
+    const movedItem = files.value.splice(dragTabIndex.value, 1)[0];
+    files.value.splice(index, 0, movedItem);
+    saveSession();
+  }
+  dragTabIndex.value = null;
+  dragOverTabIndex.value = null;
 }
 
 async function handleWikiLink(link) {
@@ -430,14 +488,15 @@ onMounted(async () => {
   
   if (window.electronAPI.onFileChanged) {
     window.electronAPI.onFileChanged((_event, filePath, newContent) => {
-      if (currentFile.value === filePath) {
+      const f = files.value.find(file => file.path === filePath);
+      if (f) {
         // Obtenir le contenu actuel (sans les retours à la ligne normalisés de macOS/Windows)
-        const currentEditorContent = editorRef.value?.getContent() ?? currentContent.value;
+        const currentEditorContent = editorRefs.value[filePath]?.getContent() ?? f.content;
         
         // Si le contenu a réellement changé (c'est-à-dire pas suite à notre propre sauvegarde)
         if (newContent !== currentEditorContent) {
-          currentContent.value = newContent;
-          isDirty.value = false;
+          f.content = newContent;
+          f.isDirty = false;
         }
       }
     });
@@ -565,6 +624,11 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown));
   background: #2e3440;
   color: #eceff4;
   border-top: 2px solid #88c0d0;
+}
+
+.tab.drag-over {
+  background: #3b4252;
+  border-left: 2px solid #88c0d0;
 }
 
 .tab-icon {
