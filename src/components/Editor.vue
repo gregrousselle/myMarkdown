@@ -14,7 +14,41 @@
       </div>
     </div>
 
-    <div v-show="editorMode === 'wysiwyg' && !hasError" ref="rootRef" class="crepe-root" @scroll="onWysiwygScroll"></div>
+    <!-- WYSIWYG Mode Container -->
+    <div v-show="editorMode === 'wysiwyg' && !hasError" class="wysiwyg-container">
+      <!-- Frontmatter Editor Block (Above WYSIWYG) -->
+      <div v-if="hasFrontmatter" class="frontmatter-panel" :class="{ 'collapsed': isFrontmatterCollapsed }">
+        <div class="frontmatter-header" @click="toggleFrontmatterCollapse">
+          <div class="frontmatter-title">
+            <svg class="frontmatter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <line x1="3" y1="9" x2="21" y2="9"/>
+              <line x1="9" y1="21" x2="9" y2="9"/>
+            </svg>
+            <span class="frontmatter-label">Métadonnées (Frontmatter)</span>
+            <span class="frontmatter-badge">YAML</span>
+          </div>
+          <button class="btn-toggle-collapse" type="button" :title="isFrontmatterCollapsed ? 'Déplier le frontmatter' : 'Replier le frontmatter'">
+            <svg class="chevron-icon" :class="{ 'rotated': !isFrontmatterCollapsed }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+        </div>
+        <div v-show="!isFrontmatterCollapsed" class="frontmatter-body">
+          <textarea
+            ref="frontmatterTextareaRef"
+            class="frontmatter-textarea"
+            :value="frontmatter"
+            placeholder="Clé: valeur"
+            @input="onFrontmatterInput"
+            rows="4"
+          ></textarea>
+        </div>
+      </div>
+
+      <div ref="rootRef" class="crepe-root" @scroll="onWysiwygScroll"></div>
+    </div>
+
     <textarea
       v-if="editorMode === 'source'"
       ref="sourceRef"
@@ -33,8 +67,8 @@ import { listener, listenerCtx } from '@milkdown/plugin-listener';
 import { remarkPluginsCtx, editorViewCtx } from '@milkdown/core';
 import { replaceAll } from '@milkdown/utils';
 import { undo, redo } from '@milkdown/prose/history';
-import remarkFrontmatter from 'remark-frontmatter';
 import remarkWikiLink from 'remark-wiki-link';
+import { parseFrontmatter, stringifyFrontmatter } from '../services/frontmatter';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/frame-dark.css';
 
@@ -48,6 +82,7 @@ const emit = defineEmits(['dirty', 'content-update', 'mode-change', 'scroll']);
 
 const rootRef = ref(null);
 const sourceRef = ref(null);
+const frontmatterTextareaRef = ref(null);
 let crepe = null;
 let isInternalUpdate = false;
 const isReady = ref(false);
@@ -55,20 +90,52 @@ let pendingContent = null;
 const hasError = ref(false);
 const errorMessage = ref('');
 
+// Frontmatter state
+const hasFrontmatter = ref(false);
+const frontmatter = ref('');
+const isFrontmatterCollapsed = ref(false);
+
+function toggleFrontmatterCollapse() {
+  isFrontmatterCollapsed.value = !isFrontmatterCollapsed.value;
+}
+
 function fallbackToSource() {
   emit('mode-change', 'source');
 }
 
 const normalize = (str) => (str || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
 
+function getFullMarkdown() {
+  if (props.editorMode === 'source') {
+    return sourceRef.value ? sourceRef.value.value : props.content;
+  }
+  const bodyMarkdown = crepe && isReady.value ? crepe.getMarkdown() : '';
+  if (hasFrontmatter.value) {
+    return stringifyFrontmatter(frontmatter.value, bodyMarkdown);
+  }
+  return bodyMarkdown;
+}
+
+function onFrontmatterInput(e) {
+  frontmatter.value = e.target.value;
+  const full = getFullMarkdown();
+  emit('content-update', full);
+  emit('dirty');
+}
+
 async function init() {
   if (!rootRef.value) return;
   isReady.value = false;
   pendingContent = null;
 
+  // Extract frontmatter and markdown body
+  const parsed = parseFrontmatter(props.content);
+  hasFrontmatter.value = parsed.hasFrontmatter;
+  frontmatter.value = parsed.frontmatter;
+
   crepe = new Crepe({
     root: rootRef.value,
-    defaultValue: props.content,
+    defaultValue: parsed.body,
   });
 
   const restoreScroll = () => {
@@ -79,19 +146,21 @@ async function init() {
     }
   };
 
-  // Adding remark plugins
+  // Adding remark plugins (remarkWikiLink only, frontmatter handled separately)
   crepe.editor
     .config((ctx) => {
       ctx.get(listenerCtx).markdownUpdated((ctx, markdown, prevMarkdown) => {
         if (markdown !== prevMarkdown && !isInternalUpdate && isReady.value) {
-          emit('content-update', markdown);
+          const full = hasFrontmatter.value
+            ? stringifyFrontmatter(frontmatter.value, markdown)
+            : markdown;
+          emit('content-update', full);
           emit('dirty');
         }
       });
 
       ctx.update(remarkPluginsCtx, (prev) => [
         ...prev,
-        { plugin: remarkFrontmatter },
         {
           plugin: remarkWikiLink,
           options: { hrefTemplate: (permalink) => `wikilink:${permalink}` }
@@ -110,9 +179,13 @@ async function init() {
     setTimeout(restoreScroll, 50);
 
     if (pendingContent !== null) {
-      if (normalize(pendingContent) !== normalize(crepe.getMarkdown())) {
+      const pendingParsed = parseFrontmatter(pendingContent);
+      hasFrontmatter.value = pendingParsed.hasFrontmatter;
+      frontmatter.value = pendingParsed.frontmatter;
+
+      if (normalize(pendingParsed.body) !== normalize(crepe.getMarkdown())) {
         isInternalUpdate = true;
-        crepe.editor.action(replaceAll(pendingContent));
+        crepe.editor.action(replaceAll(pendingParsed.body));
         setTimeout(() => {
           isInternalUpdate = false;
         }, 100);
@@ -132,14 +205,16 @@ watch(() => props.content, (newContent) => {
     return;
   }
 
+  const parsed = parseFrontmatter(newContent);
+  hasFrontmatter.value = parsed.hasFrontmatter;
+  frontmatter.value = parsed.frontmatter;
+
   if (crepe && !isInternalUpdate) {
     try {
       const currentMarkdown = crepe.getMarkdown();
-      if (normalize(newContent) !== normalize(currentMarkdown)) {
+      if (normalize(parsed.body) !== normalize(currentMarkdown)) {
         isInternalUpdate = true;
-        crepe.editor.action(replaceAll(newContent));
-        // We need to wait for the next tick or use a timeout because setMarkdown might be async or trigger listeners
-        // Also, Crepe might be doing internal processing, so we keep isInternalUpdate for a bit.
+        crepe.editor.action(replaceAll(parsed.body));
         setTimeout(() => {
           isInternalUpdate = false;
         }, 100);
@@ -157,9 +232,12 @@ watch(() => props.content, (newContent) => {
 
 defineExpose({
   getContent: () => {
+    if (props.editorMode === 'source') {
+      return sourceRef.value ? sourceRef.value.value : props.content;
+    }
     if (!isReady.value || !crepe) return props.content;
     try {
-      return crepe.getMarkdown();
+      return getFullMarkdown();
     } catch (err) {
       console.error('Error getting Crepe markdown:', err);
       return props.content;
@@ -261,11 +339,110 @@ onUnmounted(() => {
   overflow: hidden;
   height: 100%;
 }
+.wysiwyg-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+  width: 100%;
+}
 .crepe-root {
   flex: 1;
   overflow-y: auto;
   width: 100%;
 }
+
+/* Frontmatter Panel */
+.frontmatter-panel {
+  background: #2b303c;
+  border-bottom: 1px solid #3b4252;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.frontmatter-panel.collapsed {
+  background: #272c36;
+}
+.frontmatter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  cursor: pointer;
+  user-select: none;
+  background: #333a47;
+  border-bottom: 1px solid #3b4252;
+}
+.frontmatter-header:hover {
+  background: #3b4252;
+}
+.frontmatter-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #eceff4;
+}
+.frontmatter-icon {
+  width: 15px;
+  height: 15px;
+  color: #88c0d0;
+}
+.frontmatter-label {
+  color: #d8dee9;
+}
+.frontmatter-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: #434c5e;
+  color: #88c0d0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+.btn-toggle-collapse {
+  background: transparent;
+  border: none;
+  color: #d8dee9;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.chevron-icon {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s ease;
+}
+.chevron-icon.rotated {
+  transform: rotate(180deg);
+}
+.frontmatter-body {
+  padding: 12px 16px;
+  background: #2e3440;
+}
+.frontmatter-textarea {
+  width: 100%;
+  background: #252932;
+  color: #ebcb8b;
+  border: 1px solid #434c5e;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-family: 'Fira Code', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  outline: none;
+  resize: vertical;
+  min-height: 70px;
+  box-sizing: border-box;
+}
+.frontmatter-textarea:focus {
+  border-color: #88c0d0;
+}
+
 .source-editor {
   width: 100%;
   height: 100%;
