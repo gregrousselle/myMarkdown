@@ -47,7 +47,18 @@ ipcMain.handle('fs:read-dir', (_event, folderPath) => {
   try {
     const entries = fs.readdirSync(folderPath, { withFileTypes: true });
     return entries
-      .filter((e) => e.isFile() && e.name.endsWith('.md'))
+      .filter((e) => {
+        if (e.isFile()) return e.name.endsWith('.md');
+        if (e.isSymbolicLink()) {
+          try {
+            const stat = fs.statSync(path.join(folderPath, e.name));
+            return stat.isFile() && e.name.endsWith('.md');
+          } catch {
+            return false;
+          }
+        }
+        return false;
+      })
       .map((e) => ({ name: e.name, path: path.join(folderPath, e.name) }));
   } catch {
     return [];
@@ -69,20 +80,45 @@ ipcMain.handle('fs:get-templates', async () => {
   }
 });
 
-function getFileTree(folderPath) {
+function getFileTree(folderPath, visited = new Set()) {
   try {
+    let realFolderPath;
+    try {
+      realFolderPath = fs.realpathSync(folderPath);
+    } catch {
+      realFolderPath = folderPath;
+    }
+
+    if (visited.has(realFolderPath)) {
+      return null;
+    }
+    visited.add(realFolderPath);
+
     const name = path.basename(folderPath);
     const entries = fs.readdirSync(folderPath, { withFileTypes: true });
     const children = [];
 
     for (const entry of entries) {
       const fullPath = path.join(folderPath, entry.name);
-      if (entry.isDirectory()) {
-        const childTree = getFileTree(fullPath);
+      let isDir = entry.isDirectory();
+      let isFile = entry.isFile();
+
+      if (entry.isSymbolicLink()) {
+        try {
+          const stat = fs.statSync(fullPath);
+          isDir = stat.isDirectory();
+          isFile = stat.isFile();
+        } catch {
+          continue;
+        }
+      }
+
+      if (isDir) {
+        const childTree = getFileTree(fullPath, new Set(visited));
         if (childTree && (childTree.children.length > 0)) {
           children.push(childTree);
         }
-      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      } else if (isFile && entry.name.endsWith('.md')) {
         children.push({
           name: entry.name,
           path: fullPath,
@@ -126,15 +162,40 @@ ipcMain.handle('fs:write-file', async (_event, filePath, content) => {
   }
 });
 
-async function searchInDir(dir, query, results = []) {
+async function searchInDir(dir, query, results = [], visited = new Set()) {
+  let realDir;
+  try {
+    realDir = await fs.promises.realpath(dir);
+  } catch {
+    realDir = dir;
+  }
+
+  if (visited.has(realDir)) {
+    return results;
+  }
+  visited.add(realDir);
+
   const entries = await fs.promises.readdir(dir, { withFileTypes: true });
   const q = query.toLowerCase();
 
   await Promise.all(entries.map(async (entry) => {
     const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      await searchInDir(fullPath, query, results);
-    } else if (entry.isFile() && entry.name.endsWith('.md')) {
+    let isDir = entry.isDirectory();
+    let isFile = entry.isFile();
+
+    if (entry.isSymbolicLink()) {
+      try {
+        const stat = await fs.promises.stat(fullPath);
+        isDir = stat.isDirectory();
+        isFile = stat.isFile();
+      } catch {
+        return;
+      }
+    }
+
+    if (isDir) {
+      await searchInDir(fullPath, query, results, new Set(visited));
+    } else if (isFile && entry.name.endsWith('.md')) {
       const content = await fs.promises.readFile(fullPath, 'utf-8');
       if (content.toLowerCase().includes(q)) {
         const lines = content.split('\n');
